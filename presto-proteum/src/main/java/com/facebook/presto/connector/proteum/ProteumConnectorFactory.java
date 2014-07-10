@@ -26,7 +26,7 @@ public class ProteumConnectorFactory implements ConnectorFactory
 {
     private final TypeManager typeManager;
     private final Map<String, String> optionalConfig;
-    private static ProteumClient client = new ProteumClient(null, null);
+    
     public ProteumConnectorFactory(TypeManager typeManager, Map<String, String> optionalConfig)
     {
         this.typeManager = typeManager;
@@ -42,6 +42,8 @@ public class ProteumConnectorFactory implements ConnectorFactory
     @Override
     public Connector create(final String connectorId, Map<String, String> requiredConfig)
     {
+        ProteumClient client = new ProteumClient(requiredConfig.get("proteum.host"), 
+                requiredConfig.get("proteum.port")); 
         ProteumMetadata metadata = new ProteumMetadata(connectorId, client);
         ProteumSplitManager splitManager = new ProteumSplitManager(connectorId, client);
         ProteumRecordSetProvider recordSetProvider = new ProteumRecordSetProvider(connectorId);

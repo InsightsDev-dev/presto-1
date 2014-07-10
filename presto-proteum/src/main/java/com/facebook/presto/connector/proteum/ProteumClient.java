@@ -34,9 +34,9 @@ public class ProteumClient {
     public ProteumClient(String host, String port){
         List<String> schemas = new ArrayList<String>();
         tables = new HashMap<String, Map<String,ProteumTable>>();
-        
+        String baseURL = "http://"+host+":"+port;
         try{
-            URL url = new URL("http://localhost:8354/schemas");
+            URL url = new URL(baseURL+"/schemas");
             HttpURLConnection connection = (HttpURLConnection)url.openConnection();
             connection.setRequestMethod("GET");
             connection.connect();
@@ -50,7 +50,7 @@ public class ProteumClient {
                         
             in.close();
             for(String schema : schemas){
-                url = new URL("http://localhost:8354/tables/"+schema);
+                url = new URL(baseURL+"/tables/"+schema);
                 connection = (HttpURLConnection)url.openConnection();
                 connection.setRequestMethod("GET");
                 connection.connect();
@@ -71,7 +71,7 @@ public class ProteumClient {
                 List<String> tempTables = Lists.newArrayList(tables.get(schema).keySet());
                 for(String tableName : tempTables){
                     List<ProteumColumn> columns = new ArrayList<ProteumColumn>();
-                    url = new URL("http://localhost:8354/describe/"+schema+"/"+tableName);
+                    url = new URL(baseURL+"/describe/"+schema+"/"+tableName);
                     connection = (HttpURLConnection)url.openConnection();
                     connection.setRequestMethod("GET");
                     connection.connect();
@@ -82,7 +82,7 @@ public class ProteumClient {
                         Type type=getTypeFromString(nameType[1]);
                         columns.add(new ProteumColumn(nameType[0], type));
                     }
-                    List<URL> urls = Lists.newArrayList(new URL("http://localhost:8354/print/"+schema+"/"+tableName));
+                    List<URL> urls = Lists.newArrayList(new URL(baseURL+"/print/"+schema+"/"+tableName));
                     ProteumTable pTable = new ProteumTable(tableName, columns, urls);
                     tables.get(schema).put(tableName, pTable);
                 }
