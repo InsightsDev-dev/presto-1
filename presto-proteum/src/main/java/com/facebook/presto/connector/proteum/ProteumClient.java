@@ -82,7 +82,17 @@ public class ProteumClient {
                         Type type=getTypeFromString(nameType[1]);
                         columns.add(new ProteumColumn(nameType[0], type));
                     }
-                    List<URL> urls = Lists.newArrayList(new URL(baseURL+"/print/"+schema+"/"+tableName));
+                    url = new URL(baseURL+"/splits/"+schema+"/"+tableName);
+                    connection = (HttpURLConnection)url.openConnection();
+                    connection.setRequestMethod("GET");
+                    connection.connect();
+                    in = new BufferedReader(new InputStreamReader(
+                            connection.getInputStream()));
+                    String[] splits = in.readLine().split("\\|");
+                    List<URL> urls = new ArrayList<URL>();
+                    for(String split : splits){
+                        urls.add(new URL(baseURL+"/print/"+schema+"/"+tableName+"/"+split));
+                    }
                     ProteumTable pTable = new ProteumTable(tableName, columns, urls);
                     tables.get(schema).put(tableName, pTable);
                 }
