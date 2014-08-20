@@ -49,6 +49,7 @@ public class ProteumConnectorFactory implements ConnectorFactory
         ProteumRecordSetProvider recordSetProvider = new ProteumRecordSetProvider(connectorId);
         ProteumHandleResolver handleResolver = new ProteumHandleResolver(connectorId);
         ProteumConnector connector = new ProteumConnector(metadata, splitManager, recordSetProvider, handleResolver);
+        PrestoProteumService.start(client);
         return connector;
     }
 }

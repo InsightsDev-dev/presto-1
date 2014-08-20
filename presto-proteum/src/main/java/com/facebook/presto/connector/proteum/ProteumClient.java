@@ -20,8 +20,10 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import com.facebook.presto.spi.ColumnMetadata;
@@ -105,7 +107,13 @@ public class ProteumClient {
         
     }
     private Map<String, Map<String, ProteumTable>> tables;
-    
+    public Set<ProteumTable> getTables(){
+        Set<ProteumTable> result = new HashSet<ProteumTable>();
+        for(Entry<String, Map<String,ProteumTable>> entry : tables.entrySet()){
+            result.addAll(entry.getValue().values());
+        }
+        return result;
+    }
     public Set<String> getSchemas(){
         return tables.keySet();
     }
