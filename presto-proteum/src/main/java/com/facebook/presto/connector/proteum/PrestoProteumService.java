@@ -13,19 +13,23 @@
  */
 package com.facebook.presto.connector.proteum;
 
+import io.airlift.log.Logger;
+
 import org.eclipse.jetty.server.Server;
 
 public class PrestoProteumService {
-    
+	private static Logger log = Logger.get(PrestoProteumService.class);	
     public static void start(ProteumClient client){
         Server server = new Server(8360);
         server.setHandler(new PrestoProteumServiceHandler(client));
         try {
+        	log.info("Starting PrestoProteumServer");
             server.start();
+            log.info("Started PrestoProteumServer");
             server.join();
         } catch (Exception e) {
             // TODO Auto-generated catch block
-            e.printStackTrace();
+        	log.error(e);
         }
 
     }

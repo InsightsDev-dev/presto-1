@@ -42,14 +42,20 @@ public class ProteumConnectorFactory implements ConnectorFactory
     @Override
     public Connector create(final String connectorId, Map<String, String> requiredConfig)
     {
-        ProteumClient client = new ProteumClient(requiredConfig.get("proteum.host"), 
+        final ProteumClient client = new ProteumClient(requiredConfig.get("proteum.host"), 
                 requiredConfig.get("proteum.port")); 
         ProteumMetadata metadata = new ProteumMetadata(connectorId, client);
         ProteumSplitManager splitManager = new ProteumSplitManager(connectorId, client);
         ProteumRecordSetProvider recordSetProvider = new ProteumRecordSetProvider(connectorId);
         ProteumHandleResolver handleResolver = new ProteumHandleResolver(connectorId);
         ProteumConnector connector = new ProteumConnector(metadata, splitManager, recordSetProvider, handleResolver);
-        PrestoProteumService.start(client);
+        new Thread(new Runnable() {
+
+			@Override
+			public void run() {
+				PrestoProteumService.start(client);				
+			}        	
+        }).start();        
         return connector;
     }
 }

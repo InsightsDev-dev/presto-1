@@ -36,7 +36,7 @@ public class ProteumTable {
     private final String name;
     private final List<ProteumColumn> columns;
     private final List<ColumnMetadata> columnsMetadata;
-    private final List<URL> sources;
+    private volatile List<URL> sources;
     private final String schema;
     private final String baseURL;
 
@@ -76,8 +76,7 @@ public class ProteumTable {
         for(String split : splits){
             urls.add(new URL(baseURL+"/print/"+schema+"/"+name+"/"+split));
         }
-        this.sources.clear();
-        this.sources.addAll(urls);
+        this.sources = ImmutableList.copyOf(checkNotNull(urls, "sources is null"));
     }
 
     @JsonProperty
