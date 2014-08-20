@@ -17,8 +17,13 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.facebook.presto.spi.ColumnMetadata;
@@ -32,18 +37,23 @@ public class ProteumTable {
     private final List<ProteumColumn> columns;
     private final List<ColumnMetadata> columnsMetadata;
     private final List<URL> sources;
+    private final String schema;
+    private final String baseURL;
 
     @JsonCreator
     public ProteumTable(
             @JsonProperty("name") String name,
             @JsonProperty("columns") List<ProteumColumn> columns,
-            @JsonProperty("sources") List<URL> sources)
+            @JsonProperty("sources") List<URL> sources,
+            @JsonProperty("schema") String schema,
+            @JsonProperty("baseURL") String baseURL)
     {
         checkArgument(!isNullOrEmpty(name), "name is null or is empty");
         this.name = checkNotNull(name, "name is null");
         this.columns = ImmutableList.copyOf(checkNotNull(columns, "columns is null"));
         this.sources = ImmutableList.copyOf(checkNotNull(sources, "sources is null"));
-
+        this.schema = schema;
+        this.baseURL = baseURL;
         int index = 0;
         ImmutableList.Builder<ColumnMetadata> columnsMetadata = ImmutableList.builder();
         for (ProteumColumn column : this.columns) {
@@ -51,6 +61,23 @@ public class ProteumTable {
             index++;
         }
         this.columnsMetadata = columnsMetadata.build();
+    }
+    
+    public void updateSources() throws Exception{
+        URL url = new URL(baseURL+"/splits/"+schema+"/"+name);
+        HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+        connection.setRequestMethod("GET");
+        connection.connect();
+        BufferedReader in = new BufferedReader(new InputStreamReader(
+                connection.getInputStream()));
+        String[] splits = in.readLine().split("\\|");
+        in.close();
+        List<URL> urls = new ArrayList<URL>();
+        for(String split : splits){
+            urls.add(new URL(baseURL+"/print/"+schema+"/"+name+"/"+split));
+        }
+        this.sources.clear();
+        this.sources.addAll(urls);
     }
 
     @JsonProperty

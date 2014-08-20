@@ -93,7 +93,7 @@ public class ProteumClient {
                     for(String split : splits){
                         urls.add(new URL(baseURL+"/print/"+schema+"/"+tableName+"/"+split));
                     }
-                    ProteumTable pTable = new ProteumTable(tableName, columns, urls);
+                    ProteumTable pTable = new ProteumTable(tableName, columns, urls, schema, baseURL);
                     tables.get(schema).put(tableName, pTable);
                 }
             }
