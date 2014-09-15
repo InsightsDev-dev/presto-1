@@ -61,9 +61,14 @@ public class ProteumRecordCursor implements RecordCursor
         fieldToColumnIndex = new int[columnHandles.size()];
         for (int i = 0; i < columnHandles.size(); i++) {
             ProteumColumnHandle columnHandle = columnHandles.get(i);
-            fieldToColumnIndex[i] = columnHandle.getOrdinalPosition();
+            fieldToColumnIndex[i] = i;
         }
         try{
+            String path = url.toString()+"?";
+            for(ProteumColumnHandle column : columnHandles){
+                path+=column.getColumnName()+",";
+               }
+            url = new URL(path);
             HttpURLConnection connection = (HttpURLConnection)url.openConnection();
             connection.setRequestMethod("GET");
             connection.connect();
