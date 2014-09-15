@@ -28,8 +28,10 @@ import com.facebook.presto.execution.QueryStats;
 import com.facebook.presto.execution.StageInfo;
 import com.facebook.presto.execution.StageState;
 import com.facebook.presto.execution.TaskInfo;
+import com.facebook.presto.metadata.MetadataManager;
 import com.facebook.presto.operator.ExchangeClient;
 import com.facebook.presto.operator.Page;
+import com.facebook.presto.spi.ConnectorMetadata;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.block.BlockCursor;
 import com.facebook.presto.spi.type.TimeZoneKey;
@@ -46,6 +48,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Ordering;
 import com.google.common.collect.Sets;
+
 import io.airlift.log.Logger;
 import io.airlift.units.DataSize;
 import io.airlift.units.Duration;
@@ -70,8 +73,14 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.UriInfo;
 
+import java.io.BufferedReader;
 import java.io.Closeable;
+import java.io.InputStreamReader;
+import java.lang.reflect.Method;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URI;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -120,13 +129,15 @@ public class StatementResource
 
     private final ConcurrentMap<QueryId, Query> queries = new ConcurrentHashMap<>();
     private final ScheduledExecutorService queryPurger = newSingleThreadScheduledExecutor(threadsNamed("query-purger"));
+    private final MetadataManager metaManager;
+   
 
     @Inject
-    public StatementResource(QueryManager queryManager, Supplier<ExchangeClient> exchangeClientSupplier)
+    public StatementResource(QueryManager queryManager, Supplier<ExchangeClient> exchangeClientSupplier, MetadataManager metaManager)
     {
         this.queryManager = checkNotNull(queryManager, "queryManager is null");
         this.exchangeClientSupplier = checkNotNull(exchangeClientSupplier, "exchangeClientSupplier is null");
-
+        this.metaManager = metaManager;
         queryPurger.scheduleWithFixedDelay(new PurgeQueriesRunnable(queries, queryManager), 200, 200, TimeUnit.MILLISECONDS);
     }
 
@@ -155,7 +166,9 @@ public class StatementResource
         assertRequest(!isNullOrEmpty(user), "User (%s) is empty", PRESTO_USER);
         assertRequest(!isNullOrEmpty(catalog), "Catalog (%s) is empty", PRESTO_CATALOG);
         assertRequest(!isNullOrEmpty(schema), "Schema (%s) is empty", PRESTO_SCHEMA);
-
+        if(catalog.equalsIgnoreCase("proteum")){
+            statement = rewriteQuery(statement);
+        }
         if (timeZoneId == null) {
             timeZoneId = TimeZone.getDefault().getID();
         }
@@ -174,7 +187,44 @@ public class StatementResource
         queries.put(query.getQueryId(), query);
         return Response.ok(query.getNextResults(uriInfo, new Duration(1, TimeUnit.MILLISECONDS))).build();
     }
-
+    private String rewriteQuery(String query){
+        ConnectorMetadata proteumMetadata = metaManager.getConnectorMetadataById("proteum");
+        
+        String originalQuery = query;
+        boolean explainQuery = false;
+        URL url = null;
+        String result = null;
+        if(query.toLowerCase().startsWith("explain")){
+            explainQuery = true;
+            query = query.substring(query.indexOf(" ")+1);
+        }
+        if(!query.toLowerCase().startsWith("select"))return query;
+        try {
+            Method method = proteumMetadata.getClass().getMethod("getBaseURL");
+            String baseURL = method.invoke(proteumMetadata,null).toString();
+            query = query.replaceAll(" ", "%20");
+            url = new URL(baseURL+"/rewrite?q={"+query);
+            HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.connect();
+            BufferedReader in = new BufferedReader(new InputStreamReader(
+                    connection.getInputStream()));
+            result = in.readLine();
+            String schema;
+            method = proteumMetadata.getClass().getMethod("addTable", String.class);
+            while((schema = in.readLine())!=null){
+                Object returnValue = method.invoke(proteumMetadata, schema);
+            }
+            in.close();
+            connection.disconnect();
+            
+        } catch (Exception e) {
+            // TODO Auto-generated catch block
+            return originalQuery;
+        }
+        if(explainQuery) result = "explain "+result;
+        return result;
+    }
     static void assertRequest(boolean expression, String format, Object... args)
     {
         if (!expression) {

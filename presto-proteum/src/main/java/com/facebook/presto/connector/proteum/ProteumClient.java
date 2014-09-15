@@ -16,6 +16,7 @@ package com.facebook.presto.connector.proteum;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -33,10 +34,12 @@ import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.spi.type.VarcharType;
 import com.google.common.collect.Lists;
 public class ProteumClient {
+    private String baseURL;
     public ProteumClient(String host, String port){
         List<String> schemas = new ArrayList<String>();
         tables = new HashMap<String, Map<String,ProteumTable>>();
         String baseURL = "http://"+host+":"+port;
+        this.baseURL = baseURL;
         try{
             URL url = new URL(baseURL+"/schemas");
             HttpURLConnection connection = (HttpURLConnection)url.openConnection();
@@ -95,7 +98,7 @@ public class ProteumClient {
                     for(String split : splits){
                         urls.add(new URL(baseURL+"/print/"+schema+"/"+tableName+"/"+split));
                     }
-                    ProteumTable pTable = new ProteumTable(tableName, columns, urls, schema, baseURL);
+                    ProteumTable pTable = new ProteumTable(tableName, columns, urls, schema, baseURL,true);
                     tables.get(schema).put(tableName, pTable);
                 }
             }
@@ -105,6 +108,9 @@ public class ProteumClient {
             
         }
         
+    }
+    public String getBaseURL(){
+        return this.baseURL;
     }
     private Map<String, Map<String, ProteumTable>> tables;
     public Set<ProteumTable> getTables(){
@@ -125,15 +131,42 @@ public class ProteumClient {
     }
     
     public Set<String> getTableNames(String schemaName){
+        Set<String> visibleTables = new HashSet<String>();
         Map<String, ProteumTable> schemaTables = tables.get(schemaName);
         if(schemaTables == null) return null;
-        return schemaTables.keySet();
+        for(Entry<String, ProteumTable> entry : schemaTables.entrySet()){
+            if(entry.getValue().isVisible()) visibleTables.add(entry.getKey());
+        }
+        return visibleTables;
     }
     
     private Type getTypeFromString(String type){
         if(type.equalsIgnoreCase("int") || type.equalsIgnoreCase("long")) return BigintType.getInstance();
         if(type.equalsIgnoreCase("double"))return DoubleType.getInstance();
         else return VarcharType.getInstance();
+    }
+    
+    public void addTable(String schema) throws MalformedURLException{
+        String[] toks = schema.split("\\$");
+        String database = toks[0];
+        String tableName = toks[1];
+        boolean visible = Boolean.parseBoolean(toks[2]);
+        String[] splits = toks[3].split("\\|");
+        String[] tableSchema = toks[4].split("\\|");
+        
+        List<ProteumColumn> columns = new ArrayList<ProteumColumn>();
+        for(int i = 0 ; i < tableSchema.length ; i++){
+            String[]nameType = tableSchema[i].split(":");
+            Type type=getTypeFromString(nameType[1]);
+            columns.add(new ProteumColumn(nameType[0], type));
+        }
+        
+        List<URL> urls = new ArrayList<URL>();
+        for(String split : splits){
+            urls.add(new URL(baseURL+"/print/"+database+"/"+tableName+"/"+split));
+        }
+        ProteumTable pTable = new ProteumTable(tableName, columns, urls, schema, baseURL,visible);
+        tables.get(database).put(tableName, pTable);
     }
 
 }

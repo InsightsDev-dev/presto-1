@@ -39,6 +39,7 @@ public class ProteumTable {
     private volatile List<URL> sources;
     private final String schema;
     private final String baseURL;
+    private final boolean visible;
 
     @JsonCreator
     public ProteumTable(
@@ -46,7 +47,8 @@ public class ProteumTable {
             @JsonProperty("columns") List<ProteumColumn> columns,
             @JsonProperty("sources") List<URL> sources,
             @JsonProperty("schema") String schema,
-            @JsonProperty("baseURL") String baseURL)
+            @JsonProperty("baseURL") String baseURL,
+            @JsonProperty("visible") boolean visible)
     {
         checkArgument(!isNullOrEmpty(name), "name is null or is empty");
         this.name = checkNotNull(name, "name is null");
@@ -54,6 +56,7 @@ public class ProteumTable {
         this.sources = ImmutableList.copyOf(checkNotNull(sources, "sources is null"));
         this.schema = schema;
         this.baseURL = baseURL;
+        this.visible = visible;
         int index = 0;
         ImmutableList.Builder<ColumnMetadata> columnsMetadata = ImmutableList.builder();
         for (ProteumColumn column : this.columns) {
@@ -61,6 +64,10 @@ public class ProteumTable {
             index++;
         }
         this.columnsMetadata = columnsMetadata.build();
+    }
+    
+    public boolean isVisible(){
+        return this.visible;
     }
     
     public void updateSources() throws Exception{

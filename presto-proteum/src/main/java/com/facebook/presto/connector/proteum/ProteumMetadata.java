@@ -15,6 +15,7 @@ package com.facebook.presto.connector.proteum;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import java.net.MalformedURLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -152,5 +153,17 @@ public class ProteumMetadata extends ReadOnlyConnectorMetadata{
         }
         return ImmutableList.of(new SchemaTableName(prefix.getSchemaName(), prefix.getTableName()));
     }
-
+    
+    public void addTable(String schema){
+        try {
+            client.addTable(schema);
+        } catch (MalformedURLException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            throw new RuntimeException("Exception in creating the view");
+        }
+    }
+    public String getBaseURL(){
+        return client.getBaseURL();
+    }
 }

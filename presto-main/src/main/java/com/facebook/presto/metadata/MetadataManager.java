@@ -78,6 +78,10 @@ public class MetadataManager
         functions = new FunctionRegistry(typeManager, featuresConfig.isExperimentalSyntaxEnabled());
         this.typeManager = checkNotNull(typeManager, "types is null");
     }
+    
+    public ConnectorMetadata getConnectorMetadataById(String id){
+        return connectorsById.get(id);
+    }
 
     public synchronized void addConnectorMetadata(String connectorId, String catalogName, ConnectorMetadata connectorMetadata)
     {
