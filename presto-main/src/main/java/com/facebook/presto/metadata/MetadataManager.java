@@ -118,6 +118,10 @@ public class MetadataManager
         BlockEncodingSerde blockEncodingSerde = new BlockEncodingManager(typeManager);
         return new MetadataManager(featuresConfig, typeManager, splitManager, blockEncodingSerde);
     }
+    
+    public ConnectorMetadata getConnectorMetadataById(String id){
+        return connectorsById.get(id);
+    }
 
     public synchronized void addConnectorMetadata(String connectorId, String catalogName, ConnectorMetadata connectorMetadata)
     {
