@@ -19,11 +19,15 @@ import static com.google.common.base.Preconditions.checkState;
 
 import java.net.URI;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 
 
+
+
+import java.util.Map.Entry;
 
 import com.facebook.presto.spi.ConnectorColumnHandle;
 import com.facebook.presto.spi.ConnectorPartition;
@@ -32,6 +36,7 @@ import com.facebook.presto.spi.ConnectorSplit;
 import com.facebook.presto.spi.ConnectorSplitManager;
 import com.facebook.presto.spi.ConnectorSplitSource;
 import com.facebook.presto.spi.ConnectorTableHandle;
+import com.facebook.presto.spi.Domain;
 import com.facebook.presto.spi.FixedSplitSource;
 import com.facebook.presto.spi.TupleDomain;
 import com.google.common.collect.ImmutableList;
@@ -59,7 +64,12 @@ implements ConnectorSplitManager
     public ConnectorPartitionResult getPartitions(ConnectorTableHandle tableHandle, TupleDomain<ConnectorColumnHandle> tupleDomain)
     {
         ProteumTableHandle proteumTableHandle = (ProteumTableHandle) tableHandle;
-        List<ConnectorPartition> partitions = ImmutableList.<ConnectorPartition>of(new ProteumPartition(proteumTableHandle.getSchemaName(), proteumTableHandle.getTableName()));
+        List<ProteumColumnFilter> columnFilters = new ArrayList<ProteumColumnFilter>();
+        for(Entry<ConnectorColumnHandle, Domain> entry : tupleDomain.getDomains().entrySet()){
+            columnFilters.add(new ProteumColumnFilter((ProteumColumnHandle) entry.getKey(), entry.getValue()));
+        }
+        List<ConnectorPartition> partitions = ImmutableList.<ConnectorPartition>of(new ProteumPartition(proteumTableHandle.getSchemaName(), 
+                proteumTableHandle.getTableName(), columnFilters));
         return new ConnectorPartitionResult(partitions, tupleDomain);
     }
 
@@ -72,7 +82,7 @@ implements ConnectorSplitManager
         ProteumTable table = client.getTable(proteumTableHandle.getSchemaName(), proteumTableHandle.getTableName());
         List<ConnectorSplit> splits = Lists.newArrayList();
         for (URL uri : table.getSources()) {
-            splits.add(new ProteumSplit(connectorId, proteumPartition.getSchemaName(), proteumPartition.getTableName(), uri));
+            splits.add(new ProteumSplit(connectorId, proteumPartition.getSchemaName(), proteumPartition.getTableName(), uri, proteumPartition.getColumnFilters()));
         }
         Collections.shuffle(splits);
         return new FixedSplitSource(connectorId, splits);

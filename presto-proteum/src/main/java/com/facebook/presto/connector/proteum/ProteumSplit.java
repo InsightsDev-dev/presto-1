@@ -34,19 +34,21 @@ implements ConnectorSplit
     private final URL uri;
     private final boolean remotelyAccessible;
     private final ImmutableList<HostAddress> addresses;
+    private final List<ProteumColumnFilter> columnFilters;
 
     @JsonCreator
     public ProteumSplit(
             @JsonProperty("connectorId") String connectorId,
             @JsonProperty("schemaName") String schemaName,
             @JsonProperty("tableName") String tableName,
-            @JsonProperty("uri") URL uri)
+            @JsonProperty("uri") URL uri,
+            @JsonProperty("columnFilters") List<ProteumColumnFilter> columnFilters)
     {
         this.schemaName = checkNotNull(schemaName, "schema name is null");
         this.connectorId = checkNotNull(connectorId, "connector id is null");
         this.tableName = checkNotNull(tableName, "table name is null");
         this.uri = checkNotNull(uri, "uri is null");
-
+        this.columnFilters = columnFilters;
         //if ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())) {
         remotelyAccessible = true;
         addresses = ImmutableList.of(HostAddress.fromString(uri.getHost()));
@@ -75,7 +77,11 @@ implements ConnectorSplit
     {
         return uri;
     }
-
+    
+    @JsonProperty
+    public List<ProteumColumnFilter> getColumnFilters(){
+        return this.columnFilters;
+    }
     @Override
     public boolean isRemotelyAccessible()
     {

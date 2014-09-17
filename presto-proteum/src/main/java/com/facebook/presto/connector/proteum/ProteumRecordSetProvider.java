@@ -35,13 +35,13 @@ public class ProteumRecordSetProvider implements ConnectorRecordSetProvider
     public RecordSet getRecordSet(ConnectorSplit split, List<? extends ConnectorColumnHandle> columns)
     {
 
-        ProteumSplit exampleSplit = (ProteumSplit) split;
+        ProteumSplit proteumSplit = (ProteumSplit) split;
 
         ImmutableList.Builder<ProteumColumnHandle> handles = ImmutableList.builder();
         for (ConnectorColumnHandle handle : columns) {
             handles.add((ProteumColumnHandle) handle);
         }
 
-        return new ProteumRecordSet(exampleSplit, handles.build());
+        return new ProteumRecordSet(proteumSplit, handles.build());
     }
 }

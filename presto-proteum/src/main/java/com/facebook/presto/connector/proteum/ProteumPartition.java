@@ -15,6 +15,8 @@ package com.facebook.presto.connector.proteum;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import java.util.List;
+
 import com.facebook.presto.spi.ConnectorColumnHandle;
 import com.facebook.presto.spi.ConnectorPartition;
 import com.facebook.presto.spi.TupleDomain;
@@ -25,11 +27,12 @@ implements ConnectorPartition
 {
     private final String schemaName;
     private final String tableName;
-
-    public ProteumPartition(String schemaName, String tableName)
+    private final List<ProteumColumnFilter> columnFilters;
+    public ProteumPartition(String schemaName, String tableName, List<ProteumColumnFilter> columnFilters)
     {
         this.schemaName = checkNotNull(schemaName, "schema name is null");
         this.tableName = checkNotNull(tableName, "table name is null");
+        this.columnFilters = columnFilters;
     }
 
     @Override
@@ -37,7 +40,11 @@ implements ConnectorPartition
     {
         return schemaName + ":" + tableName;
     }
-
+    
+    public List<ProteumColumnFilter> getColumnFilters(){
+        return this.columnFilters;
+    }
+    
     public String getSchemaName()
     {
         return schemaName;

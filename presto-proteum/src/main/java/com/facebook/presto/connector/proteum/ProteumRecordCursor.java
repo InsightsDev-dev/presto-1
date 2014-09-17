@@ -36,6 +36,7 @@ import java.util.List;
 
 import com.facebook.presto.spi.RecordCursor;
 import com.facebook.presto.spi.type.Type;
+import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
@@ -54,20 +55,18 @@ public class ProteumRecordCursor implements RecordCursor
 
     private List<String> fields;
 
-    public ProteumRecordCursor(List<ProteumColumnHandle> columnHandles, URL url)
+    public ProteumRecordCursor(List<ProteumColumnHandle> columnHandles, URL url, List<ProteumColumnFilter> filters)
     {
         this.columnHandles = columnHandles;
 
         fieldToColumnIndex = new int[columnHandles.size()];
         for (int i = 0; i < columnHandles.size(); i++) {
-            ProteumColumnHandle columnHandle = columnHandles.get(i);
             fieldToColumnIndex[i] = i;
         }
         try{
             String path = url.toString()+"?";
-            for(ProteumColumnHandle column : columnHandles){
-                path+=column.getColumnName()+",";
-               }
+            path+=buildColumnURL(columnHandles)+"|";
+            path+=buildFilterURL(filters);
             url = new URL(path);
             HttpURLConnection connection = (HttpURLConnection)url.openConnection();
             connection.setRequestMethod("GET");
@@ -88,6 +87,19 @@ public class ProteumRecordCursor implements RecordCursor
             throw new RuntimeException(e);
         }
         
+    }
+    
+    private String buildColumnURL(List<ProteumColumnHandle> columns){
+        List<String> columnsName = new ArrayList<String>();
+        for(ProteumColumnHandle column : columns) columnsName.add(column.getColumnName());
+        return "columns={"+Joiner.on(",").join(columnsName)+"}";
+    }
+    
+    private String buildFilterURL(List<ProteumColumnFilter> filters){
+        
+        
+        
+        return "filters={"+Joiner.on(",").join(filters)+"}";
     }
 
     @Override
