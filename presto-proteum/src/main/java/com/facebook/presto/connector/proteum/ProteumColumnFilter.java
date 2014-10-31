@@ -13,6 +13,8 @@
  */
 package com.facebook.presto.connector.proteum;
 
+import io.airlift.slice.Slice;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,19 +39,27 @@ public class ProteumColumnFilter {
         for(Range range : domain.getRanges()){
             String currentRange;
             if(range.isSingleValue()){
-                currentRange = "["+range.getLow().getValue()+"%20"+range.getLow().getValue()+"]";
+                currentRange = "["+getStringValue(range.getLow())+"%20"+getStringValue(range.getLow())+"]";
                 ranges.add(currentRange);
             }
             else{
                 StringBuilder sb = new StringBuilder();
                 sb.append((range.getLow().getBound() == Marker.Bound.EXACTLY) ? '[' : '(');
-                sb.append(range.getLow().isLowerUnbounded() ? "min" : range.getLow().getValue());
+                sb.append(range.getLow().isLowerUnbounded() ? "min" : getStringValue(range.getLow()));
                 sb.append("%20");
-                sb.append(range.getHigh().isUpperUnbounded() ? "max" : range.getHigh().getValue());
+                sb.append(range.getHigh().isUpperUnbounded() ? "max" : getStringValue( range.getHigh()));
                 sb.append((range.getHigh().getBound() == Marker.Bound.EXACTLY) ? ']' : ')');
                 ranges.add(sb.toString());
             }
         }
+    }
+    
+    private String getStringValue(Marker marker){
+        Object value = marker.getValue();
+        if(value instanceof Slice){
+                return new String(((Slice) value).getBytes());
+        }
+        else return value.toString();
     }
     
     @JsonProperty
