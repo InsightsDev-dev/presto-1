@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.operator.window;
 
+import com.facebook.presto.operator.PagesIndex;
 import com.facebook.presto.spi.block.BlockBuilder;
 import com.facebook.presto.spi.type.Type;
 
@@ -32,7 +33,7 @@ public class PercentRankFunction
     }
 
     @Override
-    public void reset(int partitionRowCount)
+    public void reset(int partitionStartPosition, int partitionRowCount, PagesIndex pagesIndex)
     {
         totalCount = partitionRowCount;
         rank = 0;
@@ -43,7 +44,7 @@ public class PercentRankFunction
     public void processRow(BlockBuilder output, boolean newPeerGroup, int peerGroupCount)
     {
         if (totalCount == 1) {
-            output.appendDouble(0.0);
+            DOUBLE.writeDouble(output, 0.0);
             return;
         }
 
@@ -55,6 +56,6 @@ public class PercentRankFunction
             count++;
         }
 
-        output.appendDouble(((double) (rank - 1)) / (totalCount - 1));
+        DOUBLE.writeDouble(output, ((double) (rank - 1)) / (totalCount - 1));
     }
 }

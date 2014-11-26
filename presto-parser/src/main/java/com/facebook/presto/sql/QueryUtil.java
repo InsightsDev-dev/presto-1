@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.sql;
 
+import com.facebook.presto.sql.tree.AliasedRelation;
 import com.facebook.presto.sql.tree.ComparisonExpression;
 import com.facebook.presto.sql.tree.Expression;
 import com.facebook.presto.sql.tree.FunctionCall;
@@ -21,6 +22,7 @@ import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.sql.tree.QualifiedNameReference;
 import com.facebook.presto.sql.tree.Query;
 import com.facebook.presto.sql.tree.Relation;
+import com.facebook.presto.sql.tree.Row;
 import com.facebook.presto.sql.tree.SearchedCaseExpression;
 import com.facebook.presto.sql.tree.Select;
 import com.facebook.presto.sql.tree.SelectItem;
@@ -28,7 +30,9 @@ import com.facebook.presto.sql.tree.SingleColumn;
 import com.facebook.presto.sql.tree.SortItem;
 import com.facebook.presto.sql.tree.Table;
 import com.facebook.presto.sql.tree.TableSubquery;
+import com.facebook.presto.sql.tree.Values;
 import com.facebook.presto.sql.tree.WhenClause;
+import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 
 import java.util.List;
@@ -71,14 +75,14 @@ public final class QueryUtil
         return new Select(false, items);
     }
 
-    public static List<Relation> table(QualifiedName name)
+    public static Optional<Relation> table(QualifiedName name)
     {
-        return ImmutableList.<Relation>of(new Table(name));
+        return Optional.<Relation>of(new Table(name));
     }
 
-    public static List<Relation> subquery(Query query)
+    public static Optional<Relation> subquery(Query query)
     {
-        return ImmutableList.<Relation>of(new TableSubquery(query));
+        return Optional.<Relation>of(new TableSubquery(query));
     }
 
     public static SortItem ascending(String name)
@@ -104,5 +108,20 @@ public final class QueryUtil
     public static Expression functionCall(String name, Expression... arguments)
     {
         return new FunctionCall(new QualifiedName(name), ImmutableList.copyOf(arguments));
+    }
+
+    public static Values values(Row... row)
+    {
+        return new Values(ImmutableList.copyOf(row));
+    }
+
+    public static Row row(Expression... values)
+    {
+        return new Row(ImmutableList.copyOf(values));
+    }
+
+    public static Relation aliased(Relation relation, String alias, List<String> columnAliases)
+    {
+        return new AliasedRelation(relation, alias, columnAliases);
     }
 }

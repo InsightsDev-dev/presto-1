@@ -15,6 +15,7 @@ package com.facebook.presto.sql;
 
 import com.facebook.presto.sql.tree.AllColumns;
 import com.facebook.presto.sql.tree.ArithmeticExpression;
+import com.facebook.presto.sql.tree.ArrayConstructor;
 import com.facebook.presto.sql.tree.AstVisitor;
 import com.facebook.presto.sql.tree.BetweenPredicate;
 import com.facebook.presto.sql.tree.BooleanLiteral;
@@ -51,6 +52,7 @@ import com.facebook.presto.sql.tree.SimpleCaseExpression;
 import com.facebook.presto.sql.tree.SortItem;
 import com.facebook.presto.sql.tree.StringLiteral;
 import com.facebook.presto.sql.tree.SubqueryExpression;
+import com.facebook.presto.sql.tree.SubscriptExpression;
 import com.facebook.presto.sql.tree.TimeLiteral;
 import com.facebook.presto.sql.tree.TimestampLiteral;
 import com.facebook.presto.sql.tree.WhenClause;
@@ -82,7 +84,7 @@ public final class ExpressionFormatter
             @Override
             public String apply(Expression input)
             {
-                return ExpressionFormatter.formatExpression(input);
+                return formatExpression(input);
             }
         };
     }
@@ -106,19 +108,8 @@ public final class ExpressionFormatter
         protected String visitCurrentTime(CurrentTime node, Void context)
         {
             StringBuilder builder = new StringBuilder();
-            switch (node.getType()) {
-                case TIME:
-                    builder.append("current_time");
-                    break;
-                case DATE:
-                    builder.append("current_date");
-                    break;
-                case TIMESTAMP:
-                    builder.append("current_timestamp");
-                    break;
-                default:
-                    throw new UnsupportedOperationException("not yet implemented: " + node.getType());
-            }
+
+            builder.append(node.getType().getName());
 
             if (node.getPrecision() != null) {
                 builder.append('(')
@@ -148,6 +139,22 @@ public final class ExpressionFormatter
         }
 
         @Override
+        protected String visitArrayConstructor(ArrayConstructor node, Void context)
+        {
+            ImmutableList.Builder<String> valueStrings = ImmutableList.builder();
+            for (Expression value : node.getValues()) {
+                valueStrings.add(formatSql(value));
+            }
+            return "ARRAY[" + Joiner.on(",").join(valueStrings.build()) + "]";
+        }
+
+        @Override
+        protected String visitSubscriptExpression(SubscriptExpression node, Void context)
+        {
+            return formatSql(node.getBase()) + "[" + formatSql(node.getIndex()) + "]";
+        }
+
+        @Override
         protected String visitLongLiteral(LongLiteral node, Void context)
         {
             return Long.toString(node.getValue());
@@ -162,7 +169,7 @@ public final class ExpressionFormatter
         @Override
         protected String visitGenericLiteral(GenericLiteral node, Void context)
         {
-            return "" + node.getType() + " '" + node.getValue() + "'";
+            return node.getType() + " '" + node.getValue() + "'";
         }
 
         @Override
@@ -230,7 +237,7 @@ public final class ExpressionFormatter
         public String visitInputReference(InputReference node, Void context)
         {
             // add colon so this won't parse
-            return ":input(" + node.getInput().getChannel() + ")";
+            return ":input(" + node.getChannel() + ")";
         }
 
         @Override
@@ -361,7 +368,8 @@ public final class ExpressionFormatter
         @Override
         public String visitCast(Cast node, Void context)
         {
-            return "CAST(" + process(node.getExpression(), context) + " AS " + node.getType() + ")";
+            return (node.isSafe() ? "TRY_CAST" : "CAST") +
+                    "(" + process(node.getExpression(), context) + " AS " + node.getType() + ")";
         }
 
         @Override

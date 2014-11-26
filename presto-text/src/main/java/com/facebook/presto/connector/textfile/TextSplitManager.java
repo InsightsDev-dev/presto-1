@@ -36,11 +36,6 @@ public class TextSplitManager implements ConnectorSplitManager{
     public TextSplitManager(String connectorID){
         this.connectorID = connectorID;
     }
-    @Override
-    public String getConnectorId() {
-        // TODO Auto-generated method stub
-        return connectorID;
-    }
 
     @Override
     public ConnectorPartitionResult getPartitions(ConnectorTableHandle table,

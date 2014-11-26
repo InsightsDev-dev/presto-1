@@ -44,11 +44,13 @@ tokens {
     JOINED_TABLE;
     QUALIFIED_JOIN;
     CROSS_JOIN;
+    IMPLICIT_JOIN;
     INNER_JOIN;
     LEFT_JOIN;
     RIGHT_JOIN;
     FULL_JOIN;
     COMPARE;
+    SUBSCRIPT;
     IS_NULL;
     IS_NOT_NULL;
     IS_DISTINCT_FROM;
@@ -75,6 +77,10 @@ tokens {
     USE_SCHEMA;
     CREATE_TABLE;
     DROP_TABLE;
+    RENAME_TABLE;
+    CREATE_VIEW;
+    DROP_VIEW;
+    OR_REPLACE;
     TABLE_ELEMENT_LIST;
     COLUMN_DEF;
     NOT_NULL;
@@ -90,6 +96,8 @@ tokens {
 
 @lexer::header {
     package com.facebook.presto.sql.parser;
+
+    import java.util.EnumSet;
 }
 
 @members {
@@ -116,14 +124,18 @@ tokens {
         if (e.token.getType() == DIGIT_IDENT) {
             return "identifiers must not start with a digit; surround the identifier with double quotes";
         }
-        if (e.token.getType() == COLON_IDENT) {
-            return "identifiers must not contain a colon; use '@' instead of ':' for table links";
-        }
         return super.getErrorMessage(e, tokenNames);
     }
 }
 
 @lexer::members {
+    private EnumSet<IdentifierSymbol> allowedIdentifierSymbols = EnumSet.noneOf(IdentifierSymbol.class);
+
+    public void setAllowedIdentifierSymbols(EnumSet<IdentifierSymbol> allowedIdentifierSymbols)
+    {
+        this.allowedIdentifierSymbols = EnumSet.copyOf(allowedIdentifierSymbols);
+    }
+
     @Override
     public void reportError(RecognitionException e)
     {
@@ -157,7 +169,11 @@ statement
     | showFunctionsStmt
     | useCollectionStmt
     | createTableStmt
+    | insertStmt
     | dropTableStmt
+    | alterTableStmt
+    | createViewStmt
+    | dropViewStmt
     ;
 
 query
@@ -178,14 +194,14 @@ orderOrLimitQuerySpec
 
 queryExprBody
     : ( queryTerm -> queryTerm )
-      ( UNION setQuant? queryTerm       -> ^(UNION $queryExprBody queryTerm setQuant?)
-      | EXCEPT setQuant? queryTerm      -> ^(EXCEPT $queryExprBody queryTerm setQuant?)
+      ( UNION s=setQuant? queryTerm       -> ^(UNION $queryExprBody queryTerm $s?)
+      | EXCEPT s=setQuant? queryTerm      -> ^(EXCEPT $queryExprBody queryTerm $s?)
       )*
     ;
 
 queryTerm
     : ( queryPrimary -> queryPrimary )
-      ( INTERSECT setQuant? queryPrimary -> ^(INTERSECT $queryTerm queryPrimary setQuant?) )*
+      ( INTERSECT s=setQuant? queryPrimary -> ^(INTERSECT $queryTerm queryPrimary $s?) )*
     ;
 
 queryPrimary
@@ -215,11 +231,6 @@ simpleQuery
       havingClause?
     ;
 
-restrictedSelectStmt
-    : selectClause
-      fromClause
-    ;
-
 approximateClause
     : APPROXIMATE AT number CONFIDENCE -> ^(APPROXIMATE number)
     ;
@@ -233,7 +244,12 @@ selectClause
     ;
 
 fromClause
-    : FROM tableRef (',' tableRef)* -> ^(FROM tableRef+)
+    : FROM fromRelation -> ^(FROM fromRelation)
+    ;
+
+fromRelation
+    : (tableRef     -> tableRef)
+      (',' tableRef -> ^(IMPLICIT_JOIN $fromRelation tableRef))*
     ;
 
 whereClause
@@ -312,9 +328,14 @@ tablePrimary
     ;
 
 relation
-    : table
+    : (collectionDerivedTable) => collectionDerivedTable
+    | table
     | ('(' tableRef ')') => joinedTable
     | tableSubquery
+    ;
+
+collectionDerivedTable
+    : UNNEST '(' expr (',' expr)* ')' -> ^(UNNEST expr+)
     ;
 
 table
@@ -406,12 +427,18 @@ numericFactor
     ;
 
 exprWithTimeZone
-    : (exprPrimary -> exprPrimary)
+    : (subscriptExpression -> subscriptExpression)
       (
         // todo this should have a full tree node to preserve the syntax
-        AT TIME ZONE STRING           -> ^(FUNCTION_CALL ^(QNAME IDENT["at_time_zone"]) $exprWithTimeZone STRING)
+        AT TIME ZONE STRING             -> ^(FUNCTION_CALL ^(QNAME IDENT["at_time_zone"]) $exprWithTimeZone STRING)
       | AT TIME ZONE intervalLiteral    -> ^(FUNCTION_CALL ^(QNAME IDENT["at_time_zone"]) $exprWithTimeZone intervalLiteral)
       )?
+    ;
+
+subscriptExpression
+    : (exprPrimary -> exprPrimary)
+      ( '[' expr ']' -> ^(SUBSCRIPT $subscriptExpression expr) )*
+    | caseExpression
     ;
 
 exprPrimary
@@ -422,15 +449,14 @@ exprPrimary
     | number
     | bool
     | STRING
-    | caseExpression
     | ('(' expr ')') => ('(' expr ')' -> expr)
     | subquery
     ;
 
 qnameOrFunction
     : (qname -> qname)
-      ( ('(' '*' ')' over?                          -> ^(FUNCTION_CALL $qnameOrFunction over?))
-      | ('(' setQuant? expr? (',' expr)* ')' over?  -> ^(FUNCTION_CALL $qnameOrFunction over? setQuant? expr*))
+      ( '(' '*' ')' over?                            -> ^(FUNCTION_CALL $qnameOrFunction over?)
+      | '(' (setQuant? expr (',' expr)*)? ')' over?  -> ^(FUNCTION_CALL $qnameOrFunction over? setQuant? expr*)
       )?
     ;
 
@@ -471,7 +497,12 @@ literal
     | (TIME) => TIME STRING           -> ^(TIME STRING)
     | (TIMESTAMP) => TIMESTAMP STRING -> ^(TIMESTAMP STRING)
     | (INTERVAL) => intervalLiteral
+    | (ARRAY) => arrayConstructor
     | ident STRING                    -> ^(LITERAL ident STRING)
+    ;
+
+arrayConstructor
+    : ARRAY '[' (expr (',' expr)*)? ']'     -> ^(ARRAY expr*)
     ;
 
 intervalLiteral
@@ -496,6 +527,7 @@ specialFunction
     | SUBSTRING '(' expr FROM expr (FOR expr)? ')' -> ^(FUNCTION_CALL ^(QNAME IDENT["substr"]) expr expr expr?)
     | EXTRACT '(' ident FROM expr ')'              -> ^(EXTRACT ident expr)
     | CAST '(' expr AS type ')'                    -> ^(CAST expr type)
+    | TRY_CAST '(' expr AS type ')'                -> ^(TRY_CAST expr type)
     ;
 
 // TODO: this should be 'dataType', which supports arbitrary type specifications. For now we constrain to simple types
@@ -617,8 +649,28 @@ dropTableStmt
     : DROP TABLE qname -> ^(DROP_TABLE qname)
     ;
 
+insertStmt
+    : INSERT INTO qname query -> ^(INSERT qname query)
+    ;
+
 createTableStmt
     : CREATE TABLE qname s=tableContentsSource -> ^(CREATE_TABLE qname $s)
+    ;
+
+alterTableStmt
+    : ALTER TABLE s=qname RENAME TO t=qname -> ^(RENAME_TABLE $s $t)
+    ;
+
+createViewStmt
+    : CREATE r=orReplace? VIEW qname s=tableContentsSource -> ^(CREATE_VIEW qname $s $r?)
+    ;
+
+dropViewStmt
+    : DROP VIEW qname -> ^(DROP_VIEW qname)
+    ;
+
+orReplace
+    : OR REPLACE -> OR_REPLACE
     ;
 
 tableContentsSource
@@ -707,6 +759,7 @@ nonReserved
     | EXPLAIN | FORMAT | TYPE | TEXT | GRAPHVIZ | LOGICAL | DISTRIBUTED
     | TABLESAMPLE | SYSTEM | BERNOULLI | POISSONIZED | USE | SCHEMA | CATALOG | JSON | TO
     | RESCALED | APPROXIMATE | AT | CONFIDENCE
+    | VIEW | REPLACE
     ;
 
 SELECT: 'SELECT';
@@ -789,8 +842,13 @@ ROW: 'ROW';
 WITH: 'WITH';
 RECURSIVE: 'RECURSIVE';
 VALUES: 'VALUES';
+ARRAY: 'ARRAY';
 CREATE: 'CREATE';
 TABLE: 'TABLE';
+VIEW: 'VIEW';
+REPLACE: 'REPLACE';
+INSERT: 'INSERT';
+INTO: 'INTO';
 CHAR: 'CHAR';
 CHARACTER: 'CHARACTER';
 VARYING: 'VARYING';
@@ -815,6 +873,7 @@ JSON: 'JSON';
 LOGICAL: 'LOGICAL';
 DISTRIBUTED: 'DISTRIBUTED';
 CAST: 'CAST';
+TRY_CAST: 'TRY_CAST';
 SHOW: 'SHOW';
 TABLES: 'TABLES';
 SCHEMA: 'SCHEMA';
@@ -836,6 +895,9 @@ POISSONIZED: 'POISSONIZED';
 TABLESAMPLE: 'TABLESAMPLE';
 RESCALED: 'RESCALED';
 STRATIFY: 'STRATIFY';
+ALTER: 'ALTER';
+RENAME: 'RENAME';
+UNNEST: 'UNNEST';
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -861,11 +923,12 @@ DECIMAL_VALUE
     ;
 
 IDENT
-    : (LETTER | '_') (LETTER | DIGIT | '_' | '\@')*
+    : (LETTER | '_') (LETTER | DIGIT | '_' | '\@' | ':')*
+        { IdentifierSymbol.validateIdentifier(input, getText(), allowedIdentifierSymbols); }
     ;
 
 DIGIT_IDENT
-    : DIGIT (LETTER | DIGIT | '_' | '\@')+
+    : DIGIT (LETTER | DIGIT | '_' | '\@' | ':')+
     ;
 
 QUOTED_IDENT
@@ -876,10 +939,6 @@ QUOTED_IDENT
 BACKQUOTED_IDENT
     : '`' ( ~'`' | '``' )* '`'
         { setText(getText().substring(1, getText().length() - 1).replace("``", "`")); }
-    ;
-
-COLON_IDENT
-    : (LETTER | DIGIT | '_' )+ ':' (LETTER | DIGIT | '_' )+
     ;
 
 fragment EXPONENT

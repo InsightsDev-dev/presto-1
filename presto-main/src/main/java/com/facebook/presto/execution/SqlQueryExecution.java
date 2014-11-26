@@ -14,15 +14,17 @@
 package com.facebook.presto.execution;
 
 import com.facebook.presto.OutputBuffers;
+import com.facebook.presto.Session;
 import com.facebook.presto.UnpartitionedPagePartitionFunction;
 import com.facebook.presto.execution.StateMachine.StateChangeListener;
 import com.facebook.presto.metadata.Metadata;
-import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.spi.NodeManager;
 import com.facebook.presto.split.SplitManager;
 import com.facebook.presto.sql.analyzer.Analysis;
 import com.facebook.presto.sql.analyzer.Analyzer;
 import com.facebook.presto.sql.analyzer.FeaturesConfig;
 import com.facebook.presto.sql.analyzer.QueryExplainer;
+import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.DistributedExecutionPlanner;
 import com.facebook.presto.sql.planner.DistributedLogicalPlanner;
 import com.facebook.presto.sql.planner.InputExtractor;
@@ -48,6 +50,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.facebook.presto.OutputBuffers.INITIAL_EMPTY_OUTPUT_BUFFERS;
+import static com.facebook.presto.SystemSessionProperties.isBigQueryEnabled;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -56,34 +59,38 @@ public class SqlQueryExecution
         implements QueryExecution
 {
     private static final OutputBuffers ROOT_OUTPUT_BUFFERS = INITIAL_EMPTY_OUTPUT_BUFFERS
-            .withBuffer("out", new UnpartitionedPagePartitionFunction())
+            .withBuffer(new TaskId("output", "buffer", "id"), new UnpartitionedPagePartitionFunction())
             .withNoMoreBufferIds();
 
     private final QueryStateMachine stateMachine;
 
-    private final ConnectorSession session;
+    private final Session session;
     private final Statement statement;
     private final Metadata metadata;
+    private final SqlParser sqlParser;
     private final SplitManager splitManager;
     private final NodeScheduler nodeScheduler;
     private final List<PlanOptimizer> planOptimizers;
     private final RemoteTaskFactory remoteTaskFactory;
     private final LocationFactory locationFactory;
     private final int scheduleSplitBatchSize;
-    private final int maxPendingSplitsPerNode;
     private final int initialHashPartitions;
     private final boolean experimentalSyntaxEnabled;
+    private final boolean distributedIndexJoinsEnabled;
+    private final boolean distributedJoinsEnabled;
     private final ExecutorService queryExecutor;
 
     private final QueryExplainer queryExplainer;
     private final AtomicReference<SqlStageExecution> outputStage = new AtomicReference<>();
+    private final NodeTaskMap nodeTaskMap;
 
     public SqlQueryExecution(QueryId queryId,
             String query,
-            ConnectorSession session,
+            Session session,
             URI self,
             Statement statement,
             Metadata metadata,
+            SqlParser sqlParser,
             SplitManager splitManager,
             NodeScheduler nodeScheduler,
             List<PlanOptimizer> planOptimizers,
@@ -93,12 +100,16 @@ public class SqlQueryExecution
             int maxPendingSplitsPerNode,
             int initialHashPartitions,
             boolean experimentalSyntaxEnabled,
-            ExecutorService queryExecutor)
+            boolean distributedIndexJoinsEnabled,
+            boolean distributedJoinsEnabled,
+            ExecutorService queryExecutor,
+            NodeTaskMap nodeTaskMap)
     {
         try (SetThreadName setThreadName = new SetThreadName("Query-%s", queryId)) {
             this.session = checkNotNull(session, "session is null");
             this.statement = checkNotNull(statement, "statement is null");
             this.metadata = checkNotNull(metadata, "metadata is null");
+            this.sqlParser = checkNotNull(sqlParser, "sqlParser is null");
             this.splitManager = checkNotNull(splitManager, "splitManager is null");
             this.nodeScheduler = checkNotNull(nodeScheduler, "nodeScheduler is null");
             this.planOptimizers = checkNotNull(planOptimizers, "planOptimizers is null");
@@ -106,12 +117,12 @@ public class SqlQueryExecution
             this.locationFactory = checkNotNull(locationFactory, "locationFactory is null");
             this.queryExecutor = checkNotNull(queryExecutor, "queryExecutor is null");
             this.experimentalSyntaxEnabled = experimentalSyntaxEnabled;
+            this.distributedIndexJoinsEnabled = distributedIndexJoinsEnabled;
+            this.distributedJoinsEnabled = distributedJoinsEnabled;
+            this.nodeTaskMap = checkNotNull(nodeTaskMap, "nodeTaskMap is null");
 
             checkArgument(maxPendingSplitsPerNode > 0, "scheduleSplitBatchSize must be greater than 0");
             this.scheduleSplitBatchSize = scheduleSplitBatchSize;
-
-            checkArgument(maxPendingSplitsPerNode > 0, "maxPendingSplitsPerNode must be greater than 0");
-            this.maxPendingSplitsPerNode = maxPendingSplitsPerNode;
 
             checkArgument(initialHashPartitions > 0, "initialHashPartitions must be greater than 0");
             this.initialHashPartitions = initialHashPartitions;
@@ -122,7 +133,7 @@ public class SqlQueryExecution
             checkNotNull(self, "self is null");
             this.stateMachine = new QueryStateMachine(queryId, query, session, self, queryExecutor);
 
-            this.queryExplainer = new QueryExplainer(session, planOptimizers, metadata, experimentalSyntaxEnabled);
+            this.queryExplainer = new QueryExplainer(session, planOptimizers, metadata, sqlParser, experimentalSyntaxEnabled, distributedIndexJoinsEnabled, distributedJoinsEnabled);
         }
     }
 
@@ -190,7 +201,7 @@ public class SqlQueryExecution
         long analysisStart = System.nanoTime();
 
         // analyze query
-        Analyzer analyzer = new Analyzer(stateMachine.getSession(), metadata, Optional.of(queryExplainer), experimentalSyntaxEnabled);
+        Analyzer analyzer = new Analyzer(stateMachine.getSession(), metadata, sqlParser, Optional.of(queryExplainer), experimentalSyntaxEnabled);
 
         Analysis analysis = analyzer.analyze(statement);
         PlanNodeIdAllocator idAllocator = new PlanNodeIdAllocator();
@@ -202,7 +213,7 @@ public class SqlQueryExecution
         stateMachine.setInputs(inputs);
 
         // fragment the plan
-        SubPlan subplan = new DistributedLogicalPlanner(session, metadata, idAllocator).createSubPlans(plan, false);
+        SubPlan subplan = new DistributedLogicalPlanner(session, metadata, idAllocator).createSubPlans(plan, false, distributedIndexJoinsEnabled, distributedJoinsEnabled);
 
         stateMachine.recordAnalysisTime(analysisStart);
         return subplan;
@@ -232,9 +243,9 @@ public class SqlQueryExecution
                 remoteTaskFactory,
                 stateMachine.getSession(),
                 scheduleSplitBatchSize,
-                maxPendingSplitsPerNode,
                 initialHashPartitions,
                 queryExecutor,
+                nodeTaskMap,
                 ROOT_OUTPUT_BUFFERS);
         this.outputStage.set(outputStage);
         outputStage.addStateChangeListener(new StateChangeListener<StageInfo>()
@@ -380,49 +391,78 @@ public class SqlQueryExecution
         private final int scheduleSplitBatchSize;
         private final int maxPendingSplitsPerNode;
         private final int initialHashPartitions;
+        private final Integer bigQueryInitialHashPartitions;
         private final boolean experimentalSyntaxEnabled;
+        private final boolean distributedIndexJoinsEnabled;
+        private final boolean distributedJoinsEnabled;
         private final Metadata metadata;
+        private final SqlParser sqlParser;
         private final SplitManager splitManager;
         private final NodeScheduler nodeScheduler;
         private final List<PlanOptimizer> planOptimizers;
         private final RemoteTaskFactory remoteTaskFactory;
         private final LocationFactory locationFactory;
         private final ExecutorService executor;
+        private final NodeTaskMap nodeTaskMap;
+        private final NodeManager nodeManager;
 
         @Inject
         SqlQueryExecutionFactory(QueryManagerConfig config,
                 FeaturesConfig featuresConfig,
                 Metadata metadata,
+                SqlParser sqlParser,
                 LocationFactory locationFactory,
                 SplitManager splitManager,
                 NodeScheduler nodeScheduler,
+                NodeManager nodeManager,
                 List<PlanOptimizer> planOptimizers,
                 RemoteTaskFactory remoteTaskFactory,
-                @ForQueryExecution ExecutorService executor)
+                @ForQueryExecution ExecutorService executor,
+                NodeTaskMap nodeTaskMap)
         {
             checkNotNull(config, "config is null");
             this.scheduleSplitBatchSize = config.getScheduleSplitBatchSize();
             this.maxPendingSplitsPerNode = config.getMaxPendingSplitsPerNode();
             this.initialHashPartitions = config.getInitialHashPartitions();
+            this.bigQueryInitialHashPartitions = config.getBigQueryInitialHashPartitions();
             this.metadata = checkNotNull(metadata, "metadata is null");
+            this.sqlParser = checkNotNull(sqlParser, "sqlParser is null");
             this.locationFactory = checkNotNull(locationFactory, "locationFactory is null");
             this.splitManager = checkNotNull(splitManager, "splitManager is null");
             this.nodeScheduler = checkNotNull(nodeScheduler, "nodeScheduler is null");
             this.planOptimizers = checkNotNull(planOptimizers, "planOptimizers is null");
             this.remoteTaskFactory = checkNotNull(remoteTaskFactory, "remoteTaskFactory is null");
-            this.experimentalSyntaxEnabled = checkNotNull(featuresConfig, "featuresConfig is null").isExperimentalSyntaxEnabled();
+            checkNotNull(featuresConfig, "featuresConfig is null");
+            this.experimentalSyntaxEnabled = featuresConfig.isExperimentalSyntaxEnabled();
+            this.distributedIndexJoinsEnabled = featuresConfig.isDistributedIndexJoinsEnabled();
+            this.distributedJoinsEnabled = featuresConfig.isDistributedJoinsEnabled();
             this.executor = checkNotNull(executor, "executor is null");
+            this.nodeTaskMap = checkNotNull(nodeTaskMap, "nodeTaskMap is null");
+            this.nodeManager = checkNotNull(nodeManager, "nodeManager is null");
         }
 
         @Override
-        public SqlQueryExecution createQueryExecution(QueryId queryId, String query, ConnectorSession session, Statement statement)
+        public SqlQueryExecution createQueryExecution(QueryId queryId, String query, Session session, Statement statement)
         {
+            int initialHashPartitions;
+            if (isBigQueryEnabled(session, false)) {
+                if (this.bigQueryInitialHashPartitions == null) {
+                    initialHashPartitions = nodeManager.getActiveNodes().size();
+                }
+                else {
+                    initialHashPartitions = this.bigQueryInitialHashPartitions;
+                }
+            }
+            else {
+                initialHashPartitions = this.initialHashPartitions;
+            }
             SqlQueryExecution queryExecution = new SqlQueryExecution(queryId,
                     query,
                     session,
                     locationFactory.createQueryLocation(queryId),
                     statement,
                     metadata,
+                    sqlParser,
                     splitManager,
                     nodeScheduler,
                     planOptimizers,
@@ -432,7 +472,10 @@ public class SqlQueryExecution
                     maxPendingSplitsPerNode,
                     initialHashPartitions,
                     experimentalSyntaxEnabled,
-                    executor);
+                    distributedIndexJoinsEnabled,
+                    isBigQueryEnabled(session, distributedJoinsEnabled),
+                    executor,
+                    nodeTaskMap);
 
             return queryExecution;
         }

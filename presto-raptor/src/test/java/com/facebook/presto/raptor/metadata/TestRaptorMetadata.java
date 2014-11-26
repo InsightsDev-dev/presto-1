@@ -16,7 +16,6 @@ package com.facebook.presto.raptor.metadata;
 import com.facebook.presto.raptor.RaptorColumnHandle;
 import com.facebook.presto.raptor.RaptorConnectorId;
 import com.facebook.presto.raptor.RaptorMetadata;
-import com.facebook.presto.raptor.RaptorPartitionKey;
 import com.facebook.presto.raptor.RaptorTableHandle;
 import com.facebook.presto.spi.ColumnMetadata;
 import com.facebook.presto.spi.ConnectorColumnHandle;
@@ -24,11 +23,13 @@ import com.facebook.presto.spi.ConnectorMetadata;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.ConnectorTableHandle;
 import com.facebook.presto.spi.ConnectorTableMetadata;
+import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.SchemaTablePrefix;
 import com.facebook.presto.type.TypeRegistry;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import org.skife.jdbi.v2.DBI;
 import org.skife.jdbi.v2.Handle;
 import org.testng.annotations.AfterMethod;
@@ -36,7 +37,6 @@ import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 import static com.facebook.presto.metadata.MetadataUtil.TableMetadataBuilder.tableMetadataBuilder;
@@ -44,15 +44,19 @@ import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
 import static com.facebook.presto.spi.type.TimeZoneKey.UTC_KEY;
 import static com.facebook.presto.spi.type.VarcharType.VARCHAR;
+import static io.airlift.testing.Assertions.assertEqualsIgnoreOrder;
 import static io.airlift.testing.Assertions.assertInstanceOf;
+import static java.util.Locale.ENGLISH;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
+import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.fail;
 
 @Test(singleThreaded = true)
 public class TestRaptorMetadata
 {
-    private static final ConnectorSession SESSION = new ConnectorSession("user", "test", "default", "default", UTC_KEY, Locale.ENGLISH, null, null);
+    private static final ConnectorSession SESSION = new ConnectorSession("user", UTC_KEY, ENGLISH, System.currentTimeMillis(), null);
     private static final SchemaTableName DEFAULT_TEST_ORDERS = new SchemaTableName("test", "orders");
 
     private Handle dummyHandle;
@@ -65,7 +69,6 @@ public class TestRaptorMetadata
         TypeRegistry typeRegistry = new TypeRegistry();
         DBI dbi = new DBI("jdbc:h2:mem:test" + System.nanoTime());
         dbi.registerMapper(new TableColumn.Mapper(typeRegistry));
-        dbi.registerMapper(new RaptorPartitionKey.Mapper(typeRegistry));
         dummyHandle = dbi.open();
         metadata = new RaptorMetadata(new RaptorConnectorId("default"), dbi, new DatabaseShardManager(dbi));
     }
@@ -88,7 +91,7 @@ public class TestRaptorMetadata
         ConnectorTableMetadata table = metadata.getTableMetadata(tableHandle);
         assertTableEqual(table, getOrdersTable());
 
-        ConnectorColumnHandle columnHandle = metadata.getColumnHandle(tableHandle, "orderkey");
+        ConnectorColumnHandle columnHandle = metadata.getColumnHandles(tableHandle).get("orderkey");
         assertInstanceOf(columnHandle, RaptorColumnHandle.class);
         assertEquals(((RaptorColumnHandle) columnHandle).getColumnId(), 1);
 
@@ -124,6 +127,68 @@ public class TestRaptorMetadata
         Map<SchemaTableName, List<ColumnMetadata>> filterTable = metadata.listTableColumns(SESSION, new SchemaTablePrefix("test", "orders"));
         assertEquals(filterCatalog, filterSchema);
         assertEquals(filterCatalog, filterTable);
+    }
+
+    @Test
+    public void testViews()
+    {
+        SchemaTableName test1 = new SchemaTableName("test", "test_view1");
+        SchemaTableName test2 = new SchemaTableName("test", "test_view2");
+
+        // create views
+        metadata.createView(SESSION, test1, "test1", false);
+        metadata.createView(SESSION, test2, "test2", false);
+
+        // verify listing
+        List<SchemaTableName> list = metadata.listViews(SESSION, "test");
+        assertEqualsIgnoreOrder(list, ImmutableList.of(test1, test2));
+
+        // verify getting data
+        Map<SchemaTableName, String> views = metadata.getViews(SESSION, new SchemaTablePrefix("test"));
+        assertEquals(views.keySet(), ImmutableSet.of(test1, test2));
+        assertEquals(views.get(test1), "test1");
+        assertEquals(views.get(test2), "test2");
+
+        // drop first view
+        metadata.dropView(SESSION, test1);
+
+        views = metadata.getViews(SESSION, new SchemaTablePrefix("test"));
+        assertEquals(views.keySet(), ImmutableSet.of(test2));
+
+        // drop second view
+        metadata.dropView(SESSION, test2);
+
+        views = metadata.getViews(SESSION, new SchemaTablePrefix("test"));
+        assertTrue(views.isEmpty());
+
+        // verify listing everything
+        views = metadata.getViews(SESSION, new SchemaTablePrefix());
+        assertTrue(views.isEmpty());
+    }
+
+    @Test(expectedExceptions = PrestoException.class, expectedExceptionsMessageRegExp = "View already exists: test\\.test_view")
+    public void testCreateViewWithoutReplace()
+    {
+        SchemaTableName test = new SchemaTableName("test", "test_view");
+        try {
+            metadata.createView(SESSION, test, "test", false);
+        }
+        catch (Exception e) {
+            fail("should have succeeded");
+        }
+
+        metadata.createView(SESSION, test, "test", false);
+    }
+
+    @Test
+    public void testCreateViewWithReplace()
+    {
+        SchemaTableName test = new SchemaTableName("test", "test_view");
+
+        metadata.createView(SESSION, test, "aaa", true);
+        metadata.createView(SESSION, test, "bbb", true);
+
+        assertEquals(metadata.getViews(SESSION, test.toSchemaTablePrefix()).get(test), "bbb");
     }
 
     private static ConnectorTableMetadata getOrdersTable()

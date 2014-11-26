@@ -20,7 +20,6 @@ import com.google.common.net.HostAndPort;
 import io.airlift.configuration.Config;
 import io.airlift.configuration.ConfigDescription;
 import io.airlift.units.DataSize;
-import io.airlift.units.DataSize.Unit;
 import io.airlift.units.Duration;
 import io.airlift.units.MinDuration;
 
@@ -32,18 +31,27 @@ import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
+import static io.airlift.units.DataSize.Unit.MEGABYTE;
+
 public class HiveClientConfig
 {
     private static final Splitter SPLITTER = Splitter.on(',').trimResults().omitEmptyStrings();
 
     private TimeZone timeZone = TimeZone.getDefault();
 
-    private DataSize maxSplitSize = new DataSize(64, Unit.MEGABYTE);
+    private DataSize maxSplitSize = new DataSize(64, MEGABYTE);
     private int maxOutstandingSplits = 1_000;
     private int maxGlobalSplitIteratorThreads = 1_000;
     private int maxSplitIteratorThreads = 50;
     private int minPartitionBatchSize = 10;
     private int maxPartitionBatchSize = 100;
+    private int maxInitialSplits = 200;
+    private DataSize maxInitialSplitSize;
+    private boolean forceLocalScheduling;
+    private boolean allowDropTable;
+    private boolean allowRenameTable;
+
+    private boolean allowCorruptWritesForTesting;
 
     private Duration metastoreCacheTtl = new Duration(1, TimeUnit.HOURS);
     private Duration metastoreRefreshInterval = new Duration(2, TimeUnit.MINUTES);
@@ -54,6 +62,7 @@ public class HiveClientConfig
     private Duration dfsTimeout = new Duration(10, TimeUnit.SECONDS);
     private Duration dfsConnectTimeout = new Duration(500, TimeUnit.MILLISECONDS);
     private int dfsConnectMaxRetries = 5;
+    private boolean verifyChecksum = true;
 
     private String domainSocketPath;
 
@@ -62,10 +71,59 @@ public class HiveClientConfig
     private boolean s3SslEnabled = true;
     private int s3MaxClientRetries = 3;
     private int s3MaxErrorRetries = 10;
+    private Duration s3MaxBackoffTime = new Duration(10, TimeUnit.MINUTES);
+    private Duration s3MaxRetryTime = new Duration(10, TimeUnit.MINUTES);
     private Duration s3ConnectTimeout = new Duration(5, TimeUnit.SECONDS);
+    private Duration s3SocketTimeout = new Duration(5, TimeUnit.SECONDS);
+    private int s3MaxConnections = 500;
     private File s3StagingDirectory = new File(StandardSystemProperty.JAVA_IO_TMPDIR.value());
+    private DataSize s3MultipartMinFileSize = new DataSize(16, MEGABYTE);
+    private DataSize s3MultipartMinPartSize = new DataSize(5, MEGABYTE);
+
+    private HiveStorageFormat hiveStorageFormat = HiveStorageFormat.RCBINARY;
 
     private List<String> resourceConfigFiles;
+
+    private boolean optimizedReaderEnabled = true;
+
+    public int getMaxInitialSplits()
+    {
+        return maxInitialSplits;
+    }
+
+    @Config("hive.max-initial-splits")
+    public HiveClientConfig setMaxInitialSplits(int maxInitialSplits)
+    {
+        this.maxInitialSplits = maxInitialSplits;
+        return this;
+    }
+
+    public DataSize getMaxInitialSplitSize()
+    {
+        if (maxInitialSplitSize == null) {
+            return new DataSize(maxSplitSize.getValue() / 2, maxSplitSize.getUnit());
+        }
+        return maxInitialSplitSize;
+    }
+
+    @Config("hive.max-initial-split-size")
+    public HiveClientConfig setMaxInitialSplitSize(DataSize maxInitialSplitSize)
+    {
+        this.maxInitialSplitSize = maxInitialSplitSize;
+        return this;
+    }
+
+    public boolean isForceLocalScheduling()
+    {
+        return forceLocalScheduling;
+    }
+
+    @Config("hive.force-local-scheduling")
+    public HiveClientConfig setForceLocalScheduling(boolean forceLocalScheduling)
+    {
+        this.forceLocalScheduling = forceLocalScheduling;
+        return this;
+    }
 
     @NotNull
     public TimeZone getTimeZone()
@@ -135,6 +193,47 @@ public class HiveClientConfig
     public HiveClientConfig setMaxGlobalSplitIteratorThreads(int maxGlobalSplitIteratorThreads)
     {
         this.maxGlobalSplitIteratorThreads = maxGlobalSplitIteratorThreads;
+        return this;
+    }
+
+    public boolean getAllowRenameTable()
+    {
+        return this.allowRenameTable;
+    }
+
+    @Config("hive.allow-rename-table")
+    @ConfigDescription("Allow hive connector to rename table")
+    public HiveClientConfig setAllowRenameTable(boolean allowRenameTable)
+    {
+        this.allowRenameTable = allowRenameTable;
+        return this;
+    }
+
+    @Deprecated
+    public boolean getAllowCorruptWritesForTesting()
+    {
+        return allowCorruptWritesForTesting;
+    }
+
+    @Deprecated
+    @Config("hive.allow-corrupt-writes-for-testing")
+    @ConfigDescription("Allow Hive connector to write data even when data will likely be corrupt")
+    public HiveClientConfig setAllowCorruptWritesForTesting(boolean allowCorruptWritesForTesting)
+    {
+        this.allowCorruptWritesForTesting = allowCorruptWritesForTesting;
+        return this;
+    }
+
+    public boolean getAllowDropTable()
+    {
+        return this.allowDropTable;
+    }
+
+    @Config("hive.allow-drop-table")
+    @ConfigDescription("Allow Hive connector to drop table")
+    public HiveClientConfig setAllowDropTable(boolean allowDropTable)
+    {
+        this.allowDropTable = allowDropTable;
         return this;
     }
 
@@ -287,6 +386,18 @@ public class HiveClientConfig
         return this;
     }
 
+    public HiveStorageFormat getHiveStorageFormat()
+    {
+        return hiveStorageFormat;
+    }
+
+    @Config("hive.storage-format")
+    public HiveClientConfig setHiveStorageFormat(HiveStorageFormat hiveStorageFormat)
+    {
+        this.hiveStorageFormat = hiveStorageFormat;
+        return this;
+    }
+
     public String getDomainSocketPath()
     {
         return domainSocketPath;
@@ -296,6 +407,18 @@ public class HiveClientConfig
     public HiveClientConfig setDomainSocketPath(String domainSocketPath)
     {
         this.domainSocketPath = domainSocketPath;
+        return this;
+    }
+
+    public boolean isVerifyChecksum()
+    {
+        return verifyChecksum;
+    }
+
+    @Config("hive.dfs.verify-checksum")
+    public HiveClientConfig setVerifyChecksum(boolean verifyChecksum)
+    {
+        this.verifyChecksum = verifyChecksum;
         return this;
     }
 
@@ -361,6 +484,34 @@ public class HiveClientConfig
         return this;
     }
 
+    @MinDuration("1s")
+    @NotNull
+    public Duration getS3MaxBackoffTime()
+    {
+        return s3MaxBackoffTime;
+    }
+
+    @Config("hive.s3.max-backoff-time")
+    public HiveClientConfig setS3MaxBackoffTime(Duration s3MaxBackoffTime)
+    {
+        this.s3MaxBackoffTime = s3MaxBackoffTime;
+        return this;
+    }
+
+    @MinDuration("1ms")
+    @NotNull
+    public Duration getS3MaxRetryTime()
+    {
+        return s3MaxRetryTime;
+    }
+
+    @Config("hive.s3.max-retry-time")
+    public HiveClientConfig setS3MaxRetryTime(Duration s3MaxRetryTime)
+    {
+        this.s3MaxRetryTime = s3MaxRetryTime;
+        return this;
+    }
+
     @MinDuration("1ms")
     @NotNull
     public Duration getS3ConnectTimeout()
@@ -375,6 +526,33 @@ public class HiveClientConfig
         return this;
     }
 
+    @MinDuration("1ms")
+    @NotNull
+    public Duration getS3SocketTimeout()
+    {
+        return s3SocketTimeout;
+    }
+
+    @Config("hive.s3.socket-timeout")
+    public HiveClientConfig setS3SocketTimeout(Duration s3SocketTimeout)
+    {
+        this.s3SocketTimeout = s3SocketTimeout;
+        return this;
+    }
+
+    @Min(1)
+    public int getS3MaxConnections()
+    {
+        return s3MaxConnections;
+    }
+
+    @Config("hive.s3.max-connections")
+    public HiveClientConfig setS3MaxConnections(int s3MaxConnections)
+    {
+        this.s3MaxConnections = s3MaxConnections;
+        return this;
+    }
+
     @NotNull
     public File getS3StagingDirectory()
     {
@@ -386,6 +564,50 @@ public class HiveClientConfig
     public HiveClientConfig setS3StagingDirectory(File s3StagingDirectory)
     {
         this.s3StagingDirectory = s3StagingDirectory;
+        return this;
+    }
+
+    // TODO: add @MinDataSize(5MB) when supported in Airlift
+    @NotNull
+    public DataSize getS3MultipartMinFileSize()
+    {
+        return s3MultipartMinFileSize;
+    }
+
+    @Config("hive.s3.multipart.min-file-size")
+    @ConfigDescription("Minimum file size for an S3 multipart upload")
+    public HiveClientConfig setS3MultipartMinFileSize(DataSize size)
+    {
+        this.s3MultipartMinFileSize = size;
+        return this;
+    }
+
+    // TODO: add @MinDataSize(5MB) when supported in Airlift
+    @NotNull
+    public DataSize getS3MultipartMinPartSize()
+    {
+        return s3MultipartMinPartSize;
+    }
+
+    @Config("hive.s3.multipart.min-part-size")
+    @ConfigDescription("Minimum part size for an S3 multipart upload")
+    public HiveClientConfig setS3MultipartMinPartSize(DataSize size)
+    {
+        this.s3MultipartMinPartSize = size;
+        return this;
+    }
+
+    @Deprecated
+    public boolean isOptimizedReaderEnabled()
+    {
+        return optimizedReaderEnabled;
+    }
+
+    @Deprecated
+    @Config("hive.optimized-reader.enabled")
+    public HiveClientConfig setOptimizedReaderEnabled(boolean optimizedReaderEnabled)
+    {
+        this.optimizedReaderEnabled = optimizedReaderEnabled;
         return this;
     }
 }

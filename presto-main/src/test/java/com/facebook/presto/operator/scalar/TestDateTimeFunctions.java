@@ -13,7 +13,7 @@
  */
 package com.facebook.presto.operator.scalar;
 
-import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.Session;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.type.SqlDate;
 import com.facebook.presto.spi.type.SqlTime;
@@ -34,6 +34,7 @@ import java.util.TimeZone;
 import static com.facebook.presto.spi.type.TimeZoneKey.getTimeZoneKey;
 import static com.facebook.presto.spi.type.TimeZoneKey.getTimeZoneKeyForOffset;
 import static com.facebook.presto.util.DateTimeZoneIndex.getDateTimeZone;
+import static java.util.Locale.ENGLISH;
 import static org.joda.time.Days.daysBetween;
 import static org.joda.time.Hours.hoursBetween;
 import static org.joda.time.Minutes.minutesBetween;
@@ -41,7 +42,6 @@ import static org.joda.time.Months.monthsBetween;
 import static org.joda.time.Seconds.secondsBetween;
 import static org.joda.time.Weeks.weeksBetween;
 import static org.joda.time.Years.yearsBetween;
-import static org.testng.Assert.assertEquals;
 
 public class TestDateTimeFunctions
 {
@@ -64,13 +64,20 @@ public class TestDateTimeFunctions
     private static final String WEIRD_TIMESTAMP_LITERAL = "TIMESTAMP '2001-08-22 03:04:05.321 +07:09'";
 
     private static final TimeZoneKey WEIRD_TIME_ZONE_KEY = getTimeZoneKeyForOffset(7 * 60 + 9);
-    private ConnectorSession session;
+    private Session session;
     private FunctionAssertions functionAssertions;
 
     @BeforeClass
     public void setUp()
     {
-        session = new ConnectorSession("user", "test", "catalog", "schema", TIME_ZONE_KEY, Locale.ENGLISH, null, null);
+        session = Session.builder()
+                .setUser("user")
+                .setSource("test")
+                .setCatalog("catalog")
+                .setSchema("schema")
+                .setTimeZoneKey(TIME_ZONE_KEY)
+                .setLocale(ENGLISH)
+                .build();
         functionAssertions = new FunctionAssertions(session);
     }
 
@@ -102,14 +109,14 @@ public class TestDateTimeFunctions
     @Test
     public void testLocalTimestamp()
     {
-        assertEquals(functionAssertions.selectSingleValue("localtimestamp"), toTimestamp(session.getStartTime()));
+        functionAssertions.assertFunction("localtimestamp", toTimestamp(session.getStartTime()));
     }
 
     @Test
     public void testCurrentTimestamp()
     {
-        assertEquals(functionAssertions.selectSingleValue("current_timestamp"), new SqlTimestampWithTimeZone(session.getStartTime(), session.getTimeZoneKey()));
-        assertEquals(functionAssertions.selectSingleValue("now()"), new SqlTimestampWithTimeZone(session.getStartTime(), session.getTimeZoneKey()));
+        functionAssertions.assertFunction("current_timestamp", new SqlTimestampWithTimeZone(session.getStartTime(), session.getTimeZoneKey()));
+        functionAssertions.assertFunction("now()", new SqlTimestampWithTimeZone(session.getStartTime(), session.getTimeZoneKey()));
     }
 
     @Test
@@ -138,17 +145,18 @@ public class TestDateTimeFunctions
         assertFunction("minute(" + TIMESTAMP_LITERAL + ")", TIMESTAMP.getMinuteOfHour());
         assertFunction("hour(" + WEIRD_TIMESTAMP_LITERAL + ")", WEIRD_TIMESTAMP.getHourOfDay());
         assertFunction("minute(" + WEIRD_TIMESTAMP_LITERAL + ")", WEIRD_TIMESTAMP.getMinuteOfHour());
+        assertFunction("current_timezone()", TIME_ZONE_KEY.getId());
     }
 
     @Test
     public void testAtTimeZone()
     {
-        assertEquals(functionAssertions.selectSingleValue("current_timestamp at time zone interval '07:09' hour to minute"),
+        functionAssertions.assertFunction("current_timestamp at time zone interval '07:09' hour to minute",
                 new SqlTimestampWithTimeZone(session.getStartTime(), WEIRD_TIME_ZONE_KEY));
 
-        assertEquals(functionAssertions.selectSingleValue("current_timestamp at time zone 'Asia/Oral'"), new SqlTimestampWithTimeZone(session.getStartTime(), TimeZone.getTimeZone("Asia/Oral")));
-        assertEquals(functionAssertions.selectSingleValue("now() at time zone 'Asia/Oral'"), new SqlTimestampWithTimeZone(session.getStartTime(), TimeZone.getTimeZone("Asia/Oral")));
-        assertEquals(functionAssertions.selectSingleValue("current_timestamp at time zone '+07:09'"), new SqlTimestampWithTimeZone(session.getStartTime(), WEIRD_TIME_ZONE_KEY));
+        functionAssertions.assertFunction("current_timestamp at time zone 'Asia/Oral'", new SqlTimestampWithTimeZone(session.getStartTime(), TimeZone.getTimeZone("Asia/Oral")));
+        functionAssertions.assertFunction("now() at time zone 'Asia/Oral'", new SqlTimestampWithTimeZone(session.getStartTime(), TimeZone.getTimeZone("Asia/Oral")));
+        functionAssertions.assertFunction("current_timestamp at time zone '+07:09'", new SqlTimestampWithTimeZone(session.getStartTime(), WEIRD_TIME_ZONE_KEY));
     }
 
     @Test
@@ -168,6 +176,9 @@ public class TestDateTimeFunctions
         assertFunction("month(" + TIMESTAMP_LITERAL + ")", TIMESTAMP.getMonthOfYear());
         assertFunction("quarter(" + TIMESTAMP_LITERAL + ")", TIMESTAMP.getMonthOfYear() / 4 + 1);
         assertFunction("year(" + TIMESTAMP_LITERAL + ")", TIMESTAMP.getYear());
+        assertFunction("timezone_hour(" + TIMESTAMP_LITERAL + ")", 5);
+        assertFunction("timezone_hour(localtimestamp)", 5);
+        assertFunction("timezone_hour(current_timestamp)", 5);
 
         assertFunction("second(" + WEIRD_TIMESTAMP_LITERAL + ")", WEIRD_TIMESTAMP.getSecondOfMinute());
         assertFunction("minute(" + WEIRD_TIMESTAMP_LITERAL + ")", WEIRD_TIMESTAMP.getMinuteOfHour());
@@ -618,7 +629,14 @@ public class TestDateTimeFunctions
     public void testLocale()
     {
         Locale locale = Locale.JAPANESE;
-        ConnectorSession localeSession = new ConnectorSession("user", "test", "catalog", "schema", TIME_ZONE_KEY, locale, null, null);
+        Session localeSession = Session.builder()
+                .setUser("user")
+                .setSource("test")
+                .setCatalog("catalog")
+                .setSchema("schema")
+                .setTimeZoneKey(TIME_ZONE_KEY)
+                .setLocale(locale)
+                .build();
 
         FunctionAssertions localeAssertions = new FunctionAssertions(localeSession);
 
@@ -686,9 +704,9 @@ public class TestDateTimeFunctions
         return new SqlTimestamp(dateTime.getMillis(), session.getTimeZoneKey());
     }
 
-    private SqlTimestamp toTimestamp(DateTime dateTime, ConnectorSession connectorSession)
+    private SqlTimestamp toTimestamp(DateTime dateTime, Session session)
     {
-        return new SqlTimestamp(dateTime.getMillis(), connectorSession.getTimeZoneKey());
+        return new SqlTimestamp(dateTime.getMillis(), session.getTimeZoneKey());
     }
 
     private SqlTimestampWithTimeZone toTimestampWithTimeZone(DateTime dateTime)

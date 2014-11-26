@@ -15,14 +15,15 @@ package com.facebook.presto.raptor;
 
 import com.facebook.presto.spi.ConnectorSplit;
 import com.facebook.presto.spi.HostAddress;
+import com.facebook.presto.spi.TupleDomain;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 
 import java.util.List;
 import java.util.UUID;
 
+import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class RaptorSplit
@@ -30,16 +31,17 @@ public class RaptorSplit
 {
     private final UUID shardUuid;
     private final List<HostAddress> addresses;
+    private final TupleDomain<RaptorColumnHandle> effectivePredicate;
 
     @JsonCreator
     public RaptorSplit(
             @JsonProperty("shardUuid") UUID shardUuid,
-            @JsonProperty("addresses") List<HostAddress> addresses)
+            @JsonProperty("addresses") List<HostAddress> addresses,
+            @JsonProperty("effectivePredicate") TupleDomain<RaptorColumnHandle> effectivePredicate)
     {
         this.shardUuid = checkNotNull(shardUuid, "shardUuid is null");
-
-        checkNotNull(addresses, "addresses is null");
-        this.addresses = ImmutableList.copyOf(addresses);
+        this.addresses = ImmutableList.copyOf(checkNotNull(addresses, "addresses is null"));
+        this.effectivePredicate = checkNotNull(effectivePredicate, "effectivePredicate is null");
     }
 
     @Override
@@ -62,6 +64,12 @@ public class RaptorSplit
         return shardUuid;
     }
 
+    @JsonProperty
+    public TupleDomain<RaptorColumnHandle> getEffectivePredicate()
+    {
+        return effectivePredicate;
+    }
+
     @Override
     public Object getInfo()
     {
@@ -71,7 +79,7 @@ public class RaptorSplit
     @Override
     public String toString()
     {
-        return Objects.toStringHelper(this)
+        return toStringHelper(this)
                 .add("shardUuid", shardUuid)
                 .add("hosts", addresses)
                 .toString();

@@ -15,13 +15,16 @@ package com.facebook.presto.operator;
 
 import com.facebook.presto.ExceededMemoryLimitException;
 import com.facebook.presto.execution.TaskId;
+import com.facebook.presto.metadata.MetadataManager;
 import com.facebook.presto.operator.HashAggregationOperator.HashAggregationOperatorFactory;
-import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.operator.aggregation.InternalAggregationFunction;
+import com.facebook.presto.spi.Page;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.block.BlockBuilder;
 import com.facebook.presto.spi.block.BlockBuilderStatus;
+import com.facebook.presto.spi.type.StandardTypes;
 import com.facebook.presto.sql.planner.plan.AggregationNode.Step;
-import com.facebook.presto.sql.tree.Input;
+import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.testing.MaterializedResult;
 import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
@@ -33,32 +36,34 @@ import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 
-import static com.facebook.presto.operator.AggregationFunctionDefinition.aggregation;
-import static com.facebook.presto.operator.OperatorAssertion.appendSampleWeight;
+import static com.facebook.presto.SessionTestUtils.TEST_SESSION;
 import static com.facebook.presto.operator.OperatorAssertion.assertOperatorEqualsIgnoreOrder;
+import static com.facebook.presto.operator.OperatorAssertion.toMaterializedResult;
 import static com.facebook.presto.operator.OperatorAssertion.toPages;
 import static com.facebook.presto.operator.RowPagesBuilder.rowPagesBuilder;
 import static com.facebook.presto.operator.aggregation.AverageAggregations.LONG_AVERAGE;
 import static com.facebook.presto.operator.aggregation.CountAggregation.COUNT;
-import static com.facebook.presto.operator.aggregation.CountColumnAggregations.COUNT_BOOLEAN_COLUMN;
-import static com.facebook.presto.operator.aggregation.CountColumnAggregations.COUNT_STRING_COLUMN;
 import static com.facebook.presto.operator.aggregation.LongSumAggregation.LONG_SUM;
 import static com.facebook.presto.operator.aggregation.VarBinaryMaxAggregation.VAR_BINARY_MAX;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.BooleanType.BOOLEAN;
 import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
-import static com.facebook.presto.spi.type.TimeZoneKey.UTC_KEY;
+import static com.facebook.presto.spi.type.TypeSignature.parseTypeSignature;
 import static com.facebook.presto.spi.type.VarcharType.VARCHAR;
 import static com.facebook.presto.testing.MaterializedResult.resultBuilder;
 import static io.airlift.concurrent.Threads.daemonThreadsNamed;
 import static io.airlift.slice.SizeOf.SIZE_OF_DOUBLE;
 import static io.airlift.slice.SizeOf.SIZE_OF_LONG;
+import static io.airlift.testing.Assertions.assertEqualsIgnoreOrder;
+import static io.airlift.units.DataSize.Unit.MEGABYTE;
 import static java.util.concurrent.Executors.newCachedThreadPool;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertTrue;
 
 @Test(singleThreaded = true)
 public class TestHashAggregationOperator
@@ -70,8 +75,8 @@ public class TestHashAggregationOperator
     public void setUp()
     {
         executor = newCachedThreadPool(daemonThreadsNamed("test"));
-        ConnectorSession session = new ConnectorSession("user", "source", "catalog", "schema", UTC_KEY, Locale.ENGLISH, "address", "agent");
-        driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, session)
+
+        driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, TEST_SESSION)
                 .addPipelineContext(true, true)
                 .addDriverContext();
     }
@@ -83,52 +88,12 @@ public class TestHashAggregationOperator
     }
 
     @Test
-    public void testSampledHashAggregation()
-            throws Exception
-    {
-        List<Page> input = rowPagesBuilder(VARCHAR, VARCHAR, VARCHAR, BIGINT, BOOLEAN)
-                .addSequencePage(10, 100, 0, 100, 0, 500)
-                .addSequencePage(10, 100, 0, 200, 0, 500)
-                .addSequencePage(10, 100, 0, 300, 0, 500)
-                .build();
-        input = appendSampleWeight(input, 2);
-
-        Optional<Input> sampleWeightInput = Optional.of(new Input(input.get(0).getChannelCount() - 1));
-        HashAggregationOperatorFactory operatorFactory = new HashAggregationOperatorFactory(
-                0,
-                ImmutableList.of(VARCHAR),
-                Ints.asList(1),
-                Step.SINGLE,
-                ImmutableList.of(aggregation(COUNT, ImmutableList.of(new Input(0)), Optional.<Input>absent(), sampleWeightInput, 1.0),
-                        aggregation(LONG_SUM, ImmutableList.of(new Input(3)), Optional.<Input>absent(), sampleWeightInput, 1.0),
-                        aggregation(LONG_AVERAGE, ImmutableList.of(new Input(3)), Optional.<Input>absent(), sampleWeightInput, 1.0),
-                        aggregation(VAR_BINARY_MAX, ImmutableList.of(new Input(2)), Optional.<Input>absent(), sampleWeightInput, 1.0),
-                        aggregation(COUNT_STRING_COLUMN, ImmutableList.of(new Input(0)), Optional.<Input>absent(), sampleWeightInput, 1.0),
-                        aggregation(COUNT_BOOLEAN_COLUMN, ImmutableList.of(new Input(4)), Optional.<Input>absent(), sampleWeightInput, 1.0)),
-                100_000);
-
-        Operator operator = operatorFactory.createOperator(driverContext);
-
-        MaterializedResult expected = resultBuilder(driverContext.getSession(), VARCHAR, BIGINT, BIGINT, DOUBLE, VARCHAR, BIGINT, BIGINT)
-                .row("0", 6, 2 * 0, 0.0, "300", 6, 6)
-                .row("1", 6, 2 * 3, 1.0, "301", 6, 6)
-                .row("2", 6, 2 * 6, 2.0, "302", 6, 6)
-                .row("3", 6, 2 * 9, 3.0, "303", 6, 6)
-                .row("4", 6, 2 * 12, 4.0, "304", 6, 6)
-                .row("5", 6, 2 * 15, 5.0, "305", 6, 6)
-                .row("6", 6, 2 * 18, 6.0, "306", 6, 6)
-                .row("7", 6, 2 * 21, 7.0, "307", 6, 6)
-                .row("8", 6, 2 * 24, 8.0, "308", 6, 6)
-                .row("9", 6, 2 * 27, 9.0, "309", 6, 6)
-                .build();
-
-        assertOperatorEqualsIgnoreOrder(operator, input, expected);
-    }
-
-    @Test
     public void testHashAggregation()
             throws Exception
     {
+        MetadataManager metadata = new MetadataManager();
+        InternalAggregationFunction countVarcharColumn = metadata.resolveFunction(QualifiedName.of("count"), ImmutableList.of(parseTypeSignature(StandardTypes.VARCHAR)), false).getAggregationFunction();
+        InternalAggregationFunction countBooleanColumn = metadata.resolveFunction(QualifiedName.of("count"), ImmutableList.of(parseTypeSignature(StandardTypes.BOOLEAN)), false).getAggregationFunction();
         List<Page> input = rowPagesBuilder(VARCHAR, VARCHAR, VARCHAR, BIGINT, BOOLEAN)
                 .addSequencePage(10, 100, 0, 100, 0, 500)
                 .addSequencePage(10, 100, 0, 200, 0, 500)
@@ -140,13 +105,14 @@ public class TestHashAggregationOperator
                 ImmutableList.of(VARCHAR),
                 Ints.asList(1),
                 Step.SINGLE,
-                ImmutableList.of(aggregation(COUNT, ImmutableList.of(new Input(0)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0),
-                        aggregation(LONG_SUM, ImmutableList.of(new Input(3)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0),
-                        aggregation(LONG_AVERAGE, ImmutableList.of(new Input(3)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0),
-                        aggregation(VAR_BINARY_MAX, ImmutableList.of(new Input(2)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0),
-                        aggregation(COUNT_STRING_COLUMN, ImmutableList.of(new Input(0)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0),
-                        aggregation(COUNT_BOOLEAN_COLUMN, ImmutableList.of(new Input(4)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0)),
-                100_000);
+                ImmutableList.of(COUNT.bind(ImmutableList.of(0), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0),
+                        LONG_SUM.bind(ImmutableList.of(3), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0),
+                        LONG_AVERAGE.bind(ImmutableList.of(3), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0),
+                        VAR_BINARY_MAX.bind(ImmutableList.of(2), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0),
+                        countVarcharColumn.bind(ImmutableList.of(0), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0),
+                        countBooleanColumn.bind(ImmutableList.of(4), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0)),
+                100_000,
+                new DataSize(16, MEGABYTE));
 
         Operator operator = operatorFactory.createOperator(driverContext);
 
@@ -175,8 +141,7 @@ public class TestHashAggregationOperator
                 .addSequencePage(10, 100, 0, 300, 0)
                 .build();
 
-        ConnectorSession session = new ConnectorSession("user", "source", "catalog", "schema", UTC_KEY, Locale.ENGLISH, "address", "agent");
-        DriverContext driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, session, new DataSize(10, Unit.BYTE))
+        DriverContext driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, TEST_SESSION, new DataSize(10, Unit.BYTE))
                 .addPipelineContext(true, true)
                 .addDriverContext();
 
@@ -185,21 +150,23 @@ public class TestHashAggregationOperator
                 ImmutableList.of(VARCHAR),
                 Ints.asList(1),
                 Step.SINGLE,
-                ImmutableList.of(aggregation(COUNT, ImmutableList.of(new Input(0)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0),
-                        aggregation(LONG_SUM, ImmutableList.of(new Input(3)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0),
-                        aggregation(LONG_AVERAGE, ImmutableList.of(new Input(3)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0),
-                        aggregation(VAR_BINARY_MAX, ImmutableList.of(new Input(2)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0)),
-                100_000);
+                ImmutableList.of(COUNT.bind(ImmutableList.of(0), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0),
+                        LONG_SUM.bind(ImmutableList.of(3), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0),
+                        LONG_AVERAGE.bind(ImmutableList.of(3), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0),
+                        VAR_BINARY_MAX.bind(ImmutableList.of(2), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0)),
+                100_000,
+                new DataSize(16, MEGABYTE));
 
         Operator operator = operatorFactory.createOperator(driverContext);
 
         toPages(operator, input);
     }
 
+    @Test
     public void testHashBuilderResize()
     {
         BlockBuilder builder = VARCHAR.createBlockBuilder(new BlockBuilderStatus());
-        builder.appendSlice(Slices.allocate(200_000)); // this must be larger than DEFAULT_MAX_BLOCK_SIZE, 64K
+        VARCHAR.writeSlice(builder, Slices.allocate(200_000)); // this must be larger than DEFAULT_MAX_BLOCK_SIZE, 64K
         builder.build();
 
         List<Page> input = rowPagesBuilder(VARCHAR)
@@ -208,8 +175,7 @@ public class TestHashAggregationOperator
                 .addSequencePage(10, 100)
                 .build();
 
-        ConnectorSession session = new ConnectorSession("user", "source", "catalog", "schema", UTC_KEY, Locale.ENGLISH, "address", "agent");
-        DriverContext driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, session, new DataSize(3, Unit.MEGABYTE))
+        DriverContext driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, TEST_SESSION, new DataSize(10, MEGABYTE))
                 .addPipelineContext(true, true)
                 .addDriverContext();
 
@@ -218,8 +184,9 @@ public class TestHashAggregationOperator
                 ImmutableList.of(VARCHAR),
                 Ints.asList(0),
                 Step.SINGLE,
-                ImmutableList.of(aggregation(COUNT, ImmutableList.of(new Input(0)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0)),
-                100_000);
+                ImmutableList.of(COUNT.bind(ImmutableList.of(0), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0)),
+                100_000,
+                new DataSize(16, MEGABYTE));
 
         Operator operator = operatorFactory.createOperator(driverContext);
 
@@ -230,7 +197,7 @@ public class TestHashAggregationOperator
     public void testHashBuilderResizeLimit()
     {
         BlockBuilder builder = VARCHAR.createBlockBuilder(new BlockBuilderStatus());
-        builder.appendSlice(Slices.allocate(5_000_000)); // this must be larger than DEFAULT_MAX_BLOCK_SIZE, 64K
+        VARCHAR.writeSlice(builder, Slices.allocate(5_000_000)); // this must be larger than DEFAULT_MAX_BLOCK_SIZE, 64K
         builder.build();
 
         List<Page> input = rowPagesBuilder(VARCHAR)
@@ -239,8 +206,7 @@ public class TestHashAggregationOperator
                 .addSequencePage(10, 100)
                 .build();
 
-        ConnectorSession session = new ConnectorSession("user", "source", "catalog", "schema", UTC_KEY, Locale.ENGLISH, "address", "agent");
-        DriverContext driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, session, new DataSize(3, Unit.MEGABYTE))
+        DriverContext driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, TEST_SESSION, new DataSize(3, MEGABYTE))
                 .addPipelineContext(true, true)
                 .addDriverContext();
 
@@ -249,8 +215,9 @@ public class TestHashAggregationOperator
                 ImmutableList.of(VARCHAR),
                 Ints.asList(0),
                 Step.SINGLE,
-                ImmutableList.of(aggregation(COUNT, ImmutableList.of(new Input(0)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0)),
-                100_000);
+                ImmutableList.of(COUNT.bind(ImmutableList.of(0), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0)),
+                100_000,
+                new DataSize(16, MEGABYTE));
 
         Operator operator = operatorFactory.createOperator(driverContext);
 
@@ -274,12 +241,76 @@ public class TestHashAggregationOperator
                 ImmutableList.of(BIGINT),
                 Ints.asList(1),
                 Step.SINGLE,
-                ImmutableList.of(aggregation(COUNT, ImmutableList.of(new Input(0)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0),
-                        aggregation(LONG_AVERAGE, ImmutableList.of(new Input(1)), Optional.<Input>absent(), Optional.<Input>absent(), 1.0)),
-                100_000);
+                ImmutableList.of(COUNT.bind(ImmutableList.of(0), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0),
+                        LONG_AVERAGE.bind(ImmutableList.of(1), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0)),
+                100_000,
+                new DataSize(16, MEGABYTE));
 
         Operator operator = operatorFactory.createOperator(driverContext);
 
         assertEquals(toPages(operator, input).size(), 2);
+    }
+
+    @Test
+    public void testMultiplePartialFlushes()
+            throws Exception
+    {
+        List<Page> input = rowPagesBuilder(BIGINT)
+                .addSequencePage(500, 0)
+                .addSequencePage(500, 500)
+                .addSequencePage(500, 1000)
+                .addSequencePage(500, 1500)
+                .build();
+
+        HashAggregationOperatorFactory operatorFactory = new HashAggregationOperatorFactory(
+                0,
+                ImmutableList.of(BIGINT),
+                Ints.asList(0),
+                Step.PARTIAL,
+                ImmutableList.of(LONG_SUM.bind(ImmutableList.of(0), Optional.<Integer>absent(), Optional.<Integer>absent(), 1.0)),
+                100_000,
+                new DataSize(16, MEGABYTE));
+
+        DriverContext driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, TEST_SESSION, new DataSize(1, Unit.KILOBYTE))
+                .addPipelineContext(true, true)
+                .addDriverContext();
+        Operator operator = operatorFactory.createOperator(driverContext);
+
+        List<Page> expectedPages = rowPagesBuilder(BIGINT, BIGINT)
+                .addSequencePage(2000, 0, 0)
+                .build();
+        MaterializedResult expected = resultBuilder(driverContext.getSession(), BIGINT, BIGINT)
+                .pages(expectedPages)
+                .build();
+
+        Iterator<Page> inputIterator = input.iterator();
+
+        // Fill up the aggregation
+        while (operator.needsInput() && inputIterator.hasNext()) {
+            operator.addInput(inputIterator.next());
+        }
+
+        // Drain the output (partial flush)
+        List<Page> outputPages = new ArrayList<>();
+        while (true) {
+            Page output = operator.getOutput();
+            if (output == null) {
+                break;
+            }
+            outputPages.add(output);
+        }
+
+        // There should be some pages that were drained
+        assertTrue(!outputPages.isEmpty());
+
+        // The operator need input again since this was a partial flush
+        assertTrue(operator.needsInput());
+
+        // Now, drive the operator to completion
+        outputPages.addAll(toPages(operator, inputIterator));
+
+        MaterializedResult actual = toMaterializedResult(operator.getOperatorContext().getSession(), operator.getTypes(), outputPages);
+        assertEquals(actual.getTypes(), expected.getTypes());
+        assertEqualsIgnoreOrder(actual.getMaterializedRows(), expected.getMaterializedRows());
     }
 }

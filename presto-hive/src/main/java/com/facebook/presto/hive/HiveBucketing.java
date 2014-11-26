@@ -14,7 +14,6 @@
 package com.facebook.presto.hive;
 
 import com.facebook.presto.spi.ConnectorColumnHandle;
-import com.google.common.base.Objects;
 import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 import io.airlift.log.Logger;
@@ -28,7 +27,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.IntObjectInspector;
-import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeSpec;
 
 import java.util.HashMap;
 import java.util.List;
@@ -37,6 +35,7 @@ import java.util.Set;
 
 import static com.facebook.presto.hive.HiveUtil.getTableStructFields;
 import static com.facebook.presto.hive.util.Types.checkType;
+import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.Maps.immutableEntry;
 import static com.google.common.collect.Sets.immutableEnumSet;
@@ -88,7 +87,7 @@ final class HiveBucketing
             if ((inspector == null) || (inspector.getCategory() != Category.PRIMITIVE)) {
                 return Optional.absent();
             }
-            if (!SUPPORTED_TYPES.contains(((PrimitiveTypeSpec) inspector).getPrimitiveCategory())) {
+            if (!SUPPORTED_TYPES.contains(((PrimitiveObjectInspector) inspector).getPrimitiveCategory())) {
                 return Optional.absent();
             }
         }
@@ -218,7 +217,7 @@ final class HiveBucketing
         @Override
         public String toString()
         {
-            return Objects.toStringHelper(this)
+            return toStringHelper(this)
                     .add("bucketNumber", bucketNumber)
                     .add("bucketCount", bucketCount)
                     .toString();

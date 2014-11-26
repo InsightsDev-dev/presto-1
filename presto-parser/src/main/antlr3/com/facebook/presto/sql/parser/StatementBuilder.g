@@ -67,6 +67,10 @@ statement returns [Statement value]
     | useCollection             { $value = $useCollection.value; }
     | createTable               { $value = $createTable.value; }
     | dropTable                 { $value = $dropTable.value; }
+    | renameTable               { $value = $renameTable.value; }
+    | createView                { $value = $createView.value; }
+    | dropView                  { $value = $dropView.value; }
+    | insert                    { $value = $insert.value; }
     ;
 
 query returns [Query value]
@@ -107,7 +111,7 @@ querySpec returns [QuerySpecification value]
         limitClause?)
         { $value = new QuerySpecification(
             $selectClause.value,
-            $fromClause.value,
+            Optional.fromNullable($fromClause.value),
             Optional.fromNullable($whereClause.value),
             Objects.firstNonNull($groupClause.value, ImmutableList.<Expression>of()),
             Optional.fromNullable($havingClause.value),
@@ -120,24 +124,6 @@ setOperation returns [SetOperation value]
     : ^(UNION q1=queryBody q2=queryBody d=distinct[true])       { $value = new Union(ImmutableList.<Relation>of($q1.value, $q2.value), $d.value); }
     | ^(INTERSECT q1=queryBody q2=queryBody d=distinct[true])   { $value = new Intersect(ImmutableList.<Relation>of($q1.value, $q2.value), $d.value); }
     | ^(EXCEPT q1=queryBody q2=queryBody d=distinct[true])      { $value = new Except($q1.value, $q2.value, $d.value); }
-    ;
-
-restrictedSelectStmt returns [Query value]
-    : selectClause fromClause
-        { $value = new Query(
-            Optional.<With>absent(),
-            new QuerySpecification(
-                $selectClause.value,
-                $fromClause.value,
-                Optional.<Expression>absent(),
-                ImmutableList.<Expression>of(),
-                Optional.<Expression>absent(),
-                ImmutableList.<SortItem>of(),
-                Optional.<String>absent()),
-            ImmutableList.<SortItem>of(),
-            Optional.<String>absent(),
-            Optional.<Approximate>absent());
-        }
     ;
 
 withClause returns [With value]
@@ -183,8 +169,8 @@ selectItem returns [SelectItem value]
     | ALL_COLUMNS                                      { $value = new AllColumns(); }
     ;
 
-fromClause returns [List<Relation> value]
-    : ^(FROM t=relationList) { $value = $t.value; }
+fromClause returns [Relation value]
+    : ^(FROM relation) { $value = $relation.value; }
     ;
 
 whereClause returns [Expression value]
@@ -237,14 +223,11 @@ stratifyOn returns [List<Expression> value]
     : ^(STRATIFY_ON exprList) { $value = $exprList.value; }
     ;
 
-relationList returns [List<Relation> value = new ArrayList<>()]
-    : ( relation { $value.add($relation.value); } )+
-    ;
-
 relation returns [Relation value]
     : relationType      { $value = $relationType.value; }
     | aliasedRelation   { $value = $aliasedRelation.value; }
     | sampledRelation   { $value = $sampledRelation.value; }
+    | collectionDerivedTable { $value = $collectionDerivedTable.value; }
     ;
 
 relationType returns [Relation value]
@@ -252,6 +235,10 @@ relationType returns [Relation value]
     | tableSubquery    { $value = $tableSubquery.value; }
     | joinedTable      { $value = $joinedTable.value; }
     | joinRelation     { $value = $joinRelation.value; }
+    ;
+
+collectionDerivedTable returns [Unnest value]
+    : ^(UNNEST exprList) { $value = new Unnest($exprList.value); }
     ;
 
 namedTable returns [Table value]
@@ -265,6 +252,7 @@ joinedTable returns [Relation value]
 joinRelation returns [Join value]
     : ^(CROSS_JOIN a=relation b=relation)                               { $value = new Join(Join.Type.CROSS, $a.value, $b.value, Optional.<JoinCriteria>absent()); }
     | ^(QUALIFIED_JOIN t=joinType c=joinCriteria a=relation b=relation) { $value = new Join($t.value, $a.value, $b.value, Optional.fromNullable($c.value)); }
+    | ^(IMPLICIT_JOIN a=relation b=relation)                            { $value = new Join(Join.Type.IMPLICIT, $a.value, $b.value, Optional.<JoinCriteria>absent()); }
     ;
 
 aliasedRelation returns [AliasedRelation value]
@@ -312,6 +300,15 @@ singleExpression returns [Expression value]
     : expr EOF { $value = $expr.value; }
     ;
 
+arrayValue returns [ArrayConstructor value]
+    : ^(ARRAY exprList) { $value = new ArrayConstructor($exprList.value); }
+    | ARRAY             { $value = new ArrayConstructor(ImmutableList.<Expression>of()); }
+    ;
+
+subscript returns [SubscriptExpression value]
+    : ^(SUBSCRIPT a=expr i=expr) { $value = new SubscriptExpression($a.value, $i.value); }
+    ;
+
 expr returns [Expression value]
     : NULL                    { $value = new NullLiteral(); }
     | qname                   { $value = new QualifiedNameReference($qname.value); }
@@ -330,6 +327,8 @@ expr returns [Expression value]
     | TRUE                    { $value = BooleanLiteral.TRUE_LITERAL; }
     | FALSE                   { $value = BooleanLiteral.FALSE_LITERAL; }
     | intervalValue           { $value = $intervalValue.value; }
+    | arrayValue              { $value = $arrayValue.value; }
+    | subscript               { $value = $subscript.value; }
     | predicate               { $value = $predicate.value; }
     | ^(IN_LIST exprList)     { $value = new InListExpression($exprList.value); }
     | ^(NEGATIVE e=expr)      { $value = new NegativeExpression($e.value); }
@@ -404,7 +403,8 @@ extract returns [Extract value]
     ;
 
 cast returns [Cast value]
-    : ^(CAST expr IDENT) { $value = new Cast($expr.value, $IDENT.text); }
+    : ^(CAST expr IDENT)     { $value = new Cast($expr.value, $IDENT.text, false); }
+    | ^(TRY_CAST expr IDENT) { $value = new Cast($expr.value, $IDENT.text, true); }
     ;
 
 current_time returns [CurrentTime value]
@@ -553,4 +553,25 @@ createTable returns [Statement value]
 
 dropTable returns [Statement value]
     : ^(DROP_TABLE qname) { $value = new DropTable($qname.value); }
+    ;
+
+renameTable returns [Statement value]
+    : ^(RENAME_TABLE s=qname t=qname) { $value = new RenameTable($s.value, $t.value); }
+    ;
+
+createView returns [Statement value]
+    : ^(CREATE_VIEW qname query orReplace) { $value = new CreateView($qname.value, $query.value, $orReplace.value); }
+    ;
+
+dropView returns [Statement value]
+    : ^(DROP_VIEW qname) { $value = new DropView($qname.value); }
+    ;
+
+orReplace returns [boolean value]
+    : OR_REPLACE { $value = true; }
+    |            { $value = false; }
+	;
+
+insert returns [Statement value]
+    : ^(INSERT qname query) { $value = new Insert($qname.value, $query.value); }
     ;

@@ -24,6 +24,7 @@ import java.util.SortedSet;
 
 import static com.facebook.presto.spi.type.TimeZoneKey.MAX_TIME_ZONE_KEY;
 import static com.facebook.presto.spi.type.TimeZoneKey.UTC_KEY;
+import static java.util.Locale.ENGLISH;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertSame;
@@ -133,8 +134,8 @@ public class TestTimeZoneKey
         for (TimeZoneKey timeZoneKey : TimeZoneKey.getTimeZoneKeys()) {
             assertSame(TimeZoneKey.getTimeZoneKey(timeZoneKey.getKey()), timeZoneKey);
             assertSame(TimeZoneKey.getTimeZoneKey(timeZoneKey.getId()), timeZoneKey);
-            assertSame(TimeZoneKey.getTimeZoneKey(timeZoneKey.getId().toUpperCase()), timeZoneKey);
-            assertSame(TimeZoneKey.getTimeZoneKey(timeZoneKey.getId().toLowerCase()), timeZoneKey);
+            assertSame(TimeZoneKey.getTimeZoneKey(timeZoneKey.getId().toUpperCase(ENGLISH)), timeZoneKey);
+            assertSame(TimeZoneKey.getTimeZoneKey(timeZoneKey.getId().toLowerCase(ENGLISH)), timeZoneKey);
         }
     }
 
@@ -187,6 +188,6 @@ public class TestTimeZoneKey
             hasher.putString(timeZoneKey.getId(), StandardCharsets.UTF_8);
         }
         // Zone file should not (normally) be changed, so let's make is more difficult
-        assertEquals(hasher.hash().asLong(), -3500128963570093374L, "zone-index.properties file contents changed!");
+        assertEquals(hasher.hash().asLong(), 7273867108989103529L, "zone-index.properties file contents changed!");
     }
 }

@@ -15,7 +15,6 @@ package com.facebook.presto.sql.planner;
 
 import com.facebook.presto.sql.planner.plan.AggregationNode;
 import com.facebook.presto.sql.planner.plan.DistinctLimitNode;
-import com.facebook.presto.sql.planner.plan.MaterializeSampleNode;
 import com.facebook.presto.sql.planner.plan.ExchangeNode;
 import com.facebook.presto.sql.planner.plan.FilterNode;
 import com.facebook.presto.sql.planner.plan.IndexJoinNode;
@@ -27,6 +26,7 @@ import com.facebook.presto.sql.planner.plan.OutputNode;
 import com.facebook.presto.sql.planner.plan.PlanNode;
 import com.facebook.presto.sql.planner.plan.PlanVisitor;
 import com.facebook.presto.sql.planner.plan.ProjectNode;
+import com.facebook.presto.sql.planner.plan.RowNumberNode;
 import com.facebook.presto.sql.planner.plan.SampleNode;
 import com.facebook.presto.sql.planner.plan.SemiJoinNode;
 import com.facebook.presto.sql.planner.plan.SinkNode;
@@ -35,10 +35,13 @@ import com.facebook.presto.sql.planner.plan.TableCommitNode;
 import com.facebook.presto.sql.planner.plan.TableScanNode;
 import com.facebook.presto.sql.planner.plan.TableWriterNode;
 import com.facebook.presto.sql.planner.plan.TopNNode;
+import com.facebook.presto.sql.planner.plan.TopNRowNumberNode;
 import com.facebook.presto.sql.planner.plan.UnionNode;
+import com.facebook.presto.sql.planner.plan.UnnestNode;
 import com.facebook.presto.sql.planner.plan.ValuesNode;
 import com.facebook.presto.sql.planner.plan.WindowNode;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
 
 import java.util.Set;
 
@@ -88,16 +91,6 @@ public final class SymbolExtractor
         }
 
         @Override
-        public Void visitMaterializeSample(MaterializeSampleNode node, Void context)
-        {
-            node.getSource().accept(this, context);
-
-            builder.add(node.getSampleWeightSymbol());
-
-            return null;
-        }
-
-        @Override
         public Void visitMarkDistinct(MarkDistinctNode node, Void context)
         {
             node.getSource().accept(this, context);
@@ -119,6 +112,28 @@ public final class SymbolExtractor
         }
 
         @Override
+        public Void visitTopNRowNumber(TopNRowNumberNode node, Void context)
+        {
+            // visit child
+            node.getSource().accept(this, context);
+
+            builder.add(node.getRowNumberSymbol());
+
+            return null;
+        }
+
+        @Override
+        public Void visitRowNumber(RowNumberNode node, Void context)
+        {
+            // visit child
+            node.getSource().accept(this, context);
+
+            builder.add(node.getRowNumberSymbol());
+
+            return null;
+        }
+
+        @Override
         public Void visitFilter(FilterNode node, Void context)
         {
             // visit child
@@ -134,6 +149,16 @@ public final class SymbolExtractor
             node.getSource().accept(this, context);
 
             builder.addAll(node.getOutputSymbols());
+
+            return null;
+        }
+
+        @Override
+        public Void visitUnnest(UnnestNode node, Void context)
+        {
+            node.getSource().accept(this, context);
+
+            builder.addAll(Iterables.concat(node.getUnnestSymbols().values()));
 
             return null;
         }
@@ -222,6 +247,7 @@ public final class SymbolExtractor
             return null;
         }
 
+        @Override
         public Void visitIndexSource(IndexSourceNode node, Void context)
         {
             builder.addAll(node.getAssignments().keySet());

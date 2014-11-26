@@ -13,8 +13,8 @@
  */
 package com.facebook.presto.operator;
 
+import com.facebook.presto.Session;
 import com.facebook.presto.execution.TaskId;
-import com.facebook.presto.spi.ConnectorSession;
 import com.google.common.base.Function;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
@@ -108,17 +108,17 @@ public class PipelineContext
 
     public DriverContext addDriverContext()
     {
-        DriverContext driverContext = new DriverContext(this, executor);
+        return addDriverContext(false);
+    }
+
+    public DriverContext addDriverContext(boolean partitioned)
+    {
+        DriverContext driverContext = new DriverContext(this, executor, partitioned);
         drivers.add(driverContext);
         return driverContext;
     }
 
-    public List<DriverContext> getDrivers()
-    {
-        return ImmutableList.copyOf(drivers);
-    }
-
-    public ConnectorSession getSession()
+    public Session getSession()
     {
         return taskContext.getSession();
     }
@@ -209,11 +209,16 @@ public class PipelineContext
         return result;
     }
 
-    private synchronized void freeMemory(long bytes)
+    public synchronized void freeMemory(long bytes)
     {
         checkArgument(bytes <= memoryReservation.get(), "tried to free more memory than is reserved");
         taskContext.freeMemory(bytes);
         memoryReservation.getAndAdd(-bytes);
+    }
+
+    public boolean isVerboseStats()
+    {
+        return taskContext.isVerboseStats();
     }
 
     public boolean isCpuTimerEnabled()
@@ -267,7 +272,9 @@ public class PipelineContext
 
         int totalDriers = completedDrivers.get() + driverContexts.size();
         int queuedDrivers = 0;
+        int queuedPartitionedDrivers = 0;
         int runningDrivers = 0;
+        int runningPartitionedDrivers = 0;
         int completedDrivers = this.completedDrivers.get();
 
         Distribution queuedTime = new Distribution(this.queuedTime);
@@ -296,9 +303,15 @@ public class PipelineContext
 
             if (driverStats.getStartTime() == null) {
                 queuedDrivers++;
+                if (driverContext.isPartitioned()) {
+                    queuedPartitionedDrivers++;
+                }
             }
             else {
                 runningDrivers++;
+                if (driverContext.isPartitioned()) {
+                    runningPartitionedDrivers++;
+                }
             }
 
             queuedTime.add(driverStats.getQueuedTime().roundTo(NANOSECONDS));
@@ -324,12 +337,17 @@ public class PipelineContext
             outputPositions += driverStats.getOutputPositions();
         }
 
-        // merge the operator stats into the operator summary
-        TreeMap<Integer, OperatorStats> operatorSummaries = new TreeMap<>();
-        for (Entry<Integer, OperatorStats> entry : this.operatorSummaries.entrySet()) {
-            OperatorStats operator = entry.getValue();
-            operator.add(runningOperators.get(entry.getKey()));
-            operatorSummaries.put(entry.getKey(), operator);
+        // merge the running operator stats into the operator summary
+        TreeMap<Integer, OperatorStats> operatorSummaries = new TreeMap<>(this.operatorSummaries);
+        for (Entry<Integer, OperatorStats> entry : runningOperators.entries()) {
+            OperatorStats current = operatorSummaries.get(entry.getKey());
+            if (current == null) {
+                current = entry.getValue();
+            }
+            else {
+                current = current.add(entry.getValue());
+            }
+            operatorSummaries.put(entry.getKey(), current);
         }
 
         return new PipelineStats(
@@ -338,7 +356,9 @@ public class PipelineContext
 
                 totalDriers,
                 queuedDrivers,
+                queuedPartitionedDrivers,
                 runningDrivers,
+                runningPartitionedDrivers,
                 completedDrivers,
 
                 new DataSize(memoryReservation.get(), BYTE).convertToMostSuccinctDataSize(),
@@ -368,6 +388,7 @@ public class PipelineContext
     {
         return new Function<PipelineContext, PipelineStats>()
         {
+            @Override
             public PipelineStats apply(PipelineContext pipelineContext)
             {
                 return pipelineContext.getPipelineStats();

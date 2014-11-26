@@ -36,7 +36,7 @@ public class ProteumPlugin implements Plugin
     {
         this.optionalConfig = ImmutableMap.copyOf(checkNotNull(optionalConfig, "optionalConfig is null"));
     }
-
+    @Inject
     public synchronized void setTypeManager(TypeManager typeManager)
     {
         this.typeManager = typeManager;

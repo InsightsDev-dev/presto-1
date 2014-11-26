@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.connector.informationSchema;
 
+import com.facebook.presto.connector.system.SystemTablesManager;
 import com.facebook.presto.spi.ConnectorColumnHandle;
 import com.facebook.presto.spi.ConnectorPartition;
 import com.facebook.presto.spi.ConnectorPartitionResult;
@@ -23,8 +24,8 @@ import com.facebook.presto.spi.ConnectorTableHandle;
 import com.facebook.presto.spi.FixedSplitSource;
 import com.facebook.presto.spi.HostAddress;
 import com.facebook.presto.spi.NodeManager;
+import com.facebook.presto.spi.SerializableNativeValue;
 import com.facebook.presto.spi.TupleDomain;
-import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -35,8 +36,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import static com.facebook.presto.connector.system.SystemSplitManager.SYSTEM_DATASOURCE;
-import static com.google.common.base.Preconditions.checkArgument;
+import static com.facebook.presto.util.Types.checkType;
+import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class InformationSchemaSplitManager
@@ -51,22 +52,12 @@ public class InformationSchemaSplitManager
     }
 
     @Override
-    public String getConnectorId()
-    {
-        // information schema is not a connector
-        return null;
-    }
-
-    @Override
     public ConnectorPartitionResult getPartitions(ConnectorTableHandle table, TupleDomain<ConnectorColumnHandle> tupleDomain)
     {
-        checkNotNull(table, "table is null");
         checkNotNull(tupleDomain, "tupleDomain is null");
+        InformationSchemaTableHandle informationSchemaTableHandle = checkType(table, InformationSchemaTableHandle.class, "table");
 
-        checkArgument(table instanceof InformationSchemaTableHandle, "TableHandle must be an InformationSchemaTableHandle");
-        InformationSchemaTableHandle informationSchemaTableHandle = (InformationSchemaTableHandle) table;
-
-        Map<ConnectorColumnHandle, Comparable<?>> bindings = tupleDomain.extractFixedValues();
+        Map<ConnectorColumnHandle, SerializableNativeValue> bindings = tupleDomain.extractNullableFixedValues();
 
         List<ConnectorPartition> partitions = ImmutableList.<ConnectorPartition>of(new InformationSchemaPartition(informationSchemaTableHandle, bindings));
         // We don't strip out the bindings that we have created from the undeterminedTupleDomain b/c the current InformationSchema
@@ -79,33 +70,32 @@ public class InformationSchemaSplitManager
     {
         checkNotNull(partitions, "partitions is null");
         if (partitions.isEmpty()) {
-            return new FixedSplitSource(SYSTEM_DATASOURCE, ImmutableList.<ConnectorSplit>of());
+            return new FixedSplitSource(SystemTablesManager.CONNECTOR_ID, ImmutableList.<ConnectorSplit>of());
         }
 
         ConnectorPartition partition = Iterables.getOnlyElement(partitions);
-        checkArgument(partition instanceof InformationSchemaPartition, "Partition must be an informationSchema partition");
-        InformationSchemaPartition informationSchemaPartition = (InformationSchemaPartition) partition;
+        InformationSchemaPartition informationSchemaPartition = checkType(partition, InformationSchemaPartition.class, "partition");
 
         List<HostAddress> localAddress = ImmutableList.of(nodeManager.getCurrentNode().getHostAndPort());
 
-        ImmutableMap.Builder<String, Object> filters = ImmutableMap.builder();
-        for (Entry<ConnectorColumnHandle, Comparable<?>> entry : informationSchemaPartition.getFilters().entrySet()) {
+        ImmutableMap.Builder<String, SerializableNativeValue> filters = ImmutableMap.builder();
+        for (Entry<ConnectorColumnHandle, SerializableNativeValue> entry : informationSchemaPartition.getFilters().entrySet()) {
             InformationSchemaColumnHandle informationSchemaColumnHandle = (InformationSchemaColumnHandle) entry.getKey();
             filters.put(informationSchemaColumnHandle.getColumnName(), entry.getValue());
         }
 
-        ConnectorSplit split = new InformationSchemaSplit(informationSchemaPartition.table, filters.build(), localAddress);
+        ConnectorSplit split = new InformationSchemaSplit(informationSchemaPartition.getTable(), filters.build(), localAddress);
 
-        return new FixedSplitSource(SYSTEM_DATASOURCE, ImmutableList.of(split));
+        return new FixedSplitSource(SystemTablesManager.CONNECTOR_ID, ImmutableList.of(split));
     }
 
     public static class InformationSchemaPartition
             implements ConnectorPartition
     {
         private final InformationSchemaTableHandle table;
-        private final Map<ConnectorColumnHandle, Comparable<?>> filters;
+        private final Map<ConnectorColumnHandle, SerializableNativeValue> filters;
 
-        public InformationSchemaPartition(InformationSchemaTableHandle table, Map<ConnectorColumnHandle, Comparable<?>> filters)
+        public InformationSchemaPartition(InformationSchemaTableHandle table, Map<ConnectorColumnHandle, SerializableNativeValue> filters)
         {
             this.table = checkNotNull(table, "table is null");
             this.filters = ImmutableMap.copyOf(checkNotNull(filters, "filters is null"));
@@ -125,10 +115,10 @@ public class InformationSchemaSplitManager
         @Override
         public TupleDomain<ConnectorColumnHandle> getTupleDomain()
         {
-            return TupleDomain.withFixedValues(filters);
+            return TupleDomain.withNullableFixedValues(filters);
         }
 
-        public Map<ConnectorColumnHandle, Comparable<?>> getFilters()
+        public Map<ConnectorColumnHandle, SerializableNativeValue> getFilters()
         {
             return filters;
         }
@@ -136,7 +126,7 @@ public class InformationSchemaSplitManager
         @Override
         public String toString()
         {
-            return Objects.toStringHelper(this)
+            return toStringHelper(this)
                     .add("table", table)
                     .add("filters", filters)
                     .toString();

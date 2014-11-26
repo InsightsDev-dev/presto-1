@@ -22,7 +22,7 @@ This will hold the following configuration:
 * Node Properties: environmental configuration specific to each node
 * JVM Config: command line options for the Java Virtual Machine
 * Config Properties: configuration for the Presto server
-* Catalog Properties: configuration for connectors (data sources)
+* Catalog Properties: configuration for :doc:`/connector` (data sources)
 
 .. _presto_node_properties:
 
@@ -101,6 +101,12 @@ floating point numbers. This is important because many Hive file formats
 store floating point values as text. Change the path
 ``/var/presto/installation`` to match the Presto installation directory.
 
+.. note::
+
+    When using Java 8, remove the ``-XX:PermSize``, ``-XX:MaxPermSize`` and
+    ``-Xbootclasspath`` options. The ``PermSize`` options are not supported
+    and the floatingdecimal patch is only for Java 7.
+
 .. _config_properties:
 
 Config Properties
@@ -130,6 +136,18 @@ And this is a minimal configuration for the workers:
     coordinator=false
     http-server.http.port=8080
     task.max-memory=1GB
+    discovery.uri=http://example.net:8080
+
+Alternatively, if you are setting up a single machine for testing that
+will function as both a coordinator and worker, use this configuration:
+
+.. code-block:: none
+
+    coordinator=true
+    node-scheduler.include-coordinator=true
+    http-server.http.port=8080
+    task.max-memory=1GB
+    discovery-server.enabled=true
     discovery.uri=http://example.net:8080
 
 These properties require some explanation:
@@ -166,8 +184,7 @@ These properties require some explanation:
   on startup. In order to simplify deployment and avoid running an additional
   service, the Presto coordinator can run an embedded version of the
   Discovery service. It shares the HTTP server with Presto and thus uses
-  the same port. For larger clusters, we recommend running Discovery as a
-  dedicated service. See :doc:`discovery` for details.
+  the same port.
 
 * ``discovery.uri``:
   The URI to the Discovery server. Because we have enabled the embedded
@@ -187,11 +204,12 @@ For example, consider the following log levels file:
 
 .. code-block:: none
 
-    com.facebook.presto=DEBUG
+    com.facebook.presto=INFO
 
-This would set the minimum level to ``DEBUG`` for both
+This would set the minimum level to ``INFO`` for both
 ``com.facebook.presto.server`` and ``com.facebook.presto.hive``.
-The default minimum level is ``INFO``.
+The default minimum level is ``INFO``
+(thus the above example does not actually change anything).
 There are four levels: ``DEBUG``, ``INFO``, ``WARN`` and ``ERROR``.
 
 Catalog Properties
@@ -201,8 +219,8 @@ Presto accesses data via *connectors*, which are mounted in catalogs.
 The connector provides all of the schemas and tables inside of the catalog.
 For example, the Hive connector maps each Hive database to a schema,
 so if the Hive connector is mounted as the ``hive`` catalog, and Hive
-contains a table ``bar`` in database ``foo``, that table would be accessed
-in Presto as ``hive.foo.bar``.
+contains a table ``clicks`` in database ``web``, that table would be accessed
+in Presto as ``hive.web.clicks``.
 
 Catalogs are registered by creating a catalog properties file
 in the ``etc/catalog`` directory.
@@ -213,27 +231,7 @@ contents to mount the ``jmx`` connector as the ``jmx`` catalog:
 
     connector.name=jmx
 
-Presto includes Hive connectors for multiple versions of Hadoop:
-
-* ``hive-hadoop1``: Apache Hadoop 1.x
-* ``hive-hadoop2``: Apache Hadoop 2.x
-* ``hive-cdh4``: Cloudera CDH 4
-* ``hive-cdh5``: Cloudera CDH 5
-
-Create ``etc/catalog/hive.properties`` with the following contents
-to mount the ``hive-cdh4`` connector as the ``hive`` catalog,
-replacing ``hive-cdh4`` with the proper connector for your version
-of Hadoop and ``example.net:9083`` with the correct host and port
-for your Hive metastore Thrift service:
-
-.. code-block:: none
-
-    connector.name=hive-cdh4
-    hive.metastore.uri=thrift://example.net:9083
-
-You can have as many catalogs as you need, so if you have additional
-Hive clusters, simply add another properties file to ``etc/catalog``
-with a different name (making sure it ends in ``.properties``).
+See :doc:`/connector` for more information about configuring connectors.
 
 .. _running_presto:
 

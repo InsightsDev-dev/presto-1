@@ -26,15 +26,31 @@ import java.util.concurrent.TimeUnit;
 
 public class TaskManagerConfig
 {
+    private boolean verboseStats;
     private boolean taskCpuTimerEnabled = true;
     private DataSize maxTaskMemoryUsage = new DataSize(256, Unit.MEGABYTE);
+    private DataSize bigQueryMaxTaskMemoryUsage;
+    private DataSize maxPartialAggregationMemoryUsage = new DataSize(16, Unit.MEGABYTE);
     private DataSize operatorPreAllocatedMemory = new DataSize(16, Unit.MEGABYTE);
+    private DataSize maxTaskIndexMemoryUsage = new DataSize(64, Unit.MEGABYTE);
     private int maxShardProcessorThreads = Runtime.getRuntime().availableProcessors() * 4;
 
     private DataSize sinkMaxBufferSize = new DataSize(32, Unit.MEGABYTE);
 
     private Duration clientTimeout = new Duration(5, TimeUnit.MINUTES);
     private Duration infoMaxAge = new Duration(15, TimeUnit.MINUTES);
+
+    public boolean isVerboseStats()
+    {
+        return verboseStats;
+    }
+
+    @Config("task.verbose-stats")
+    public TaskManagerConfig setVerboseStats(boolean verboseStats)
+    {
+        this.verboseStats = verboseStats;
+        return this;
+    }
 
     public boolean isTaskCpuTimerEnabled()
     {
@@ -45,6 +61,34 @@ public class TaskManagerConfig
     public TaskManagerConfig setTaskCpuTimerEnabled(boolean taskCpuTimerEnabled)
     {
         this.taskCpuTimerEnabled = taskCpuTimerEnabled;
+        return this;
+    }
+
+    @NotNull
+    public DataSize getMaxPartialAggregationMemoryUsage()
+    {
+        return maxPartialAggregationMemoryUsage;
+    }
+
+    @Config("task.max-partial-aggregation-memory")
+    public TaskManagerConfig setMaxPartialAggregationMemoryUsage(DataSize maxPartialAggregationMemoryUsage)
+    {
+        this.maxPartialAggregationMemoryUsage = maxPartialAggregationMemoryUsage;
+        return this;
+    }
+
+    public DataSize getBigQueryMaxTaskMemoryUsage()
+    {
+        if (bigQueryMaxTaskMemoryUsage == null) {
+            return new DataSize(2 * maxTaskMemoryUsage.toBytes(), Unit.BYTE);
+        }
+        return bigQueryMaxTaskMemoryUsage;
+    }
+
+    @Config("experimental.big-query-max-task-memory")
+    public TaskManagerConfig setBigQueryMaxTaskMemoryUsage(DataSize bigQueryMaxTaskMemoryUsage)
+    {
+        this.bigQueryMaxTaskMemoryUsage = bigQueryMaxTaskMemoryUsage;
         return this;
     }
 
@@ -71,6 +115,19 @@ public class TaskManagerConfig
     public TaskManagerConfig setOperatorPreAllocatedMemory(DataSize operatorPreAllocatedMemory)
     {
         this.operatorPreAllocatedMemory = operatorPreAllocatedMemory;
+        return this;
+    }
+
+    @NotNull
+    public DataSize getMaxTaskIndexMemoryUsage()
+    {
+        return maxTaskIndexMemoryUsage;
+    }
+
+    @Config("task.max-index-memory")
+    public TaskManagerConfig setMaxTaskIndexMemoryUsage(DataSize maxTaskIndexMemoryUsage)
+    {
+        this.maxTaskIndexMemoryUsage = maxTaskIndexMemoryUsage;
         return this;
     }
 

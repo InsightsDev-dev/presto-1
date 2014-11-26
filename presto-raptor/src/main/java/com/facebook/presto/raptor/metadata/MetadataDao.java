@@ -32,7 +32,7 @@ public interface MetadataDao
             "  table_name VARCHAR(255) NOT NULL,\n" +
             "  UNIQUE (catalog_name, schema_name, table_name)\n" +
             ")")
-    void createTablesTable();
+    void createTableTables();
 
     @SqlUpdate("CREATE TABLE IF NOT EXISTS columns (\n" +
             "  table_id BIGINT NOT NULL,\n" +
@@ -45,7 +45,16 @@ public interface MetadataDao
             "  UNIQUE (table_id, ordinal_position),\n" +
             "  FOREIGN KEY (table_id) REFERENCES tables (table_id)\n" +
             ")")
-    void createColumnsTable();
+    void createTableColumns();
+
+    @SqlUpdate("CREATE TABLE IF NOT EXISTS views (\n" +
+            "  catalog_name VARCHAR(255) NOT NULL,\n" +
+            "  schema_name VARCHAR(255) NOT NULL,\n" +
+            "  table_name VARCHAR(255) NOT NULL,\n" +
+            "  data TEXT NOT NULL,\n" +
+            "  PRIMARY KEY (catalog_name, schema_name, table_name)\n" +
+            ")")
+    void createTableViews();
 
     @SqlQuery("SELECT table_id FROM tables\n" +
             "WHERE catalog_name = :catalogName\n" +
@@ -115,6 +124,27 @@ public interface MetadataDao
             "ORDER BY c.ordinal_position")
     List<TableColumn> listTableColumns(@Bind("tableId") long tableId);
 
+    @SqlQuery("SELECT catalog_name, schema_name, table_name, data\n" +
+            "FROM views\n" +
+            "WHERE (catalog_name = :catalogName OR :catalogName IS NULL)\n" +
+            "  AND (schema_name = :schemaName OR :schemaName IS NULL)")
+    @Mapper(SchemaTableNameMapper.class)
+    List<SchemaTableName> listViews(
+            @Bind("catalogName") String catalogName,
+            @Bind("schemaName") String schemaName);
+
+    @SqlQuery("SELECT schema_name, table_name, data\n" +
+            "FROM views\n" +
+            "WHERE catalog_name = :catalogName\n" +
+            "  AND (schema_name = :schemaName OR :schemaName IS NULL)\n" +
+            "  AND (table_name = :tableName OR :tableName IS NULL)\n" +
+            "ORDER BY schema_name, table_name\n")
+    @Mapper(ViewResult.Mapper.class)
+    List<ViewResult> getViews(
+            @Bind("catalogName") String catalogName,
+            @Bind("schemaName") String schemaName,
+            @Bind("tableName") String tableName);
+
     @SqlUpdate("INSERT INTO tables (catalog_name, schema_name, table_name)\n" +
             "VALUES (:catalogName, :schemaName, :tableName)")
     @GetGeneratedKeys
@@ -132,9 +162,35 @@ public interface MetadataDao
             @Bind("ordinalPosition") int ordinalPosition,
             @Bind("dataType") String dataType);
 
+    @SqlUpdate("UPDATE tables SET\n" +
+            "  schema_name = :newSchemaName\n" +
+            ", table_name = :newTableName\n" +
+            "WHERE table_id = :tableId")
+    void renameTable(
+            @Bind("tableId") long tableId,
+            @Bind("newSchemaName") String newSchemaName,
+            @Bind("newTableName") String newTableName);
+
+    @SqlUpdate("INSERT INTO views (catalog_name, schema_name, table_name, data)\n" +
+            "VALUES (:catalogName, :schemaName, :tableName, :data)")
+    void insertView(
+            @Bind("catalogName") String catalogName,
+            @Bind("schemaName") String schemaName,
+            @Bind("tableName") String tableName,
+            @Bind("data") String data);
+
     @SqlUpdate("DELETE FROM tables WHERE table_id = :tableId")
     int dropTable(@Bind("tableId") long tableId);
 
     @SqlUpdate("DELETE FROM columns WHERE table_id = :tableId")
     int dropColumns(@Bind("tableId") long tableId);
+
+    @SqlUpdate("DELETE FROM views\n" +
+            "WHERE catalog_name = :catalogName\n" +
+            "  AND schema_name = :schemaName\n" +
+            "  AND table_name = :tableName")
+    int dropView(
+            @Bind("catalogName") String catalogName,
+            @Bind("schemaName") String schemaName,
+            @Bind("tableName") String tableName);
 }

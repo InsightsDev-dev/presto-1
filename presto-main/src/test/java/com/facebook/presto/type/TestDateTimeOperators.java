@@ -13,8 +13,8 @@
  */
 package com.facebook.presto.type;
 
+import com.facebook.presto.Session;
 import com.facebook.presto.operator.scalar.FunctionAssertions;
-import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.type.SqlDate;
 import com.facebook.presto.spi.type.SqlTime;
 import com.facebook.presto.spi.type.SqlTimeWithTimeZone;
@@ -26,11 +26,10 @@ import org.joda.time.DateTimeZone;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
-import java.util.Locale;
-
 import static com.facebook.presto.spi.type.TimeZoneKey.getTimeZoneKey;
 import static com.facebook.presto.spi.type.TimeZoneKey.getTimeZoneKeyForOffset;
 import static com.facebook.presto.util.DateTimeZoneIndex.getDateTimeZone;
+import static java.util.Locale.ENGLISH;
 import static java.util.concurrent.TimeUnit.HOURS;
 import static org.testng.Assert.fail;
 
@@ -41,13 +40,19 @@ public class TestDateTimeOperators
     private static final DateTimeZone WEIRD_TIME_ZONE = DateTimeZone.forOffsetHoursMinutes(5, 9);
     private static final TimeZoneKey WEIRD_TIME_ZONE_KEY = getTimeZoneKeyForOffset(5 * 60 + 9);
 
-    private ConnectorSession session;
     private FunctionAssertions functionAssertions;
 
     @BeforeClass
     public void setUp()
     {
-        session = new ConnectorSession("user", "test", "catalog", "schema", TIME_ZONE_KEY, Locale.ENGLISH, null, null);
+        Session session = Session.builder()
+                .setUser("user")
+                .setSource("test")
+                .setCatalog("catalog")
+                .setSchema("schema")
+                .setTimeZoneKey(TIME_ZONE_KEY)
+                .setLocale(ENGLISH)
+                .build();
         functionAssertions = new FunctionAssertions(session);
     }
 
@@ -67,14 +72,14 @@ public class TestDateTimeOperators
         assertFunction("INTERVAL '3' year + DATE '2001-1-22'", new SqlDate(new DateTime(2004, 1, 22, 0, 0, 0, 0, TIME_ZONE).getMillis(), TIME_ZONE_KEY));
 
         try {
-            functionAssertions.selectSingleValue("DATE '2001-1-22' + INTERVAL '3' hour");
+            functionAssertions.tryEvaluate("DATE '2001-1-22' + INTERVAL '3' hour");
             fail("Expected IllegalArgumentException");
         }
         catch (IllegalArgumentException expected) {
         }
 
         try {
-            functionAssertions.selectSingleValue("INTERVAL '3' hour + DATE '2001-1-22'");
+            functionAssertions.tryEvaluate("INTERVAL '3' hour + DATE '2001-1-22'");
             fail("Expected IllegalArgumentException");
         }
         catch (IllegalArgumentException expected) {
@@ -163,7 +168,7 @@ public class TestDateTimeOperators
         assertFunction("DATE '2001-1-22' - INTERVAL '3' day", new SqlDate(new DateTime(2001, 1, 19, 0, 0, 0, 0, TIME_ZONE).getMillis(), TIME_ZONE_KEY));
 
         try {
-            functionAssertions.selectSingleValue("DATE '2001-1-22' - INTERVAL '3' hour");
+            functionAssertions.tryEvaluate("DATE '2001-1-22' - INTERVAL '3' hour");
             fail("Expected IllegalArgumentException");
         }
         catch (IllegalArgumentException expected) {
@@ -215,6 +220,24 @@ public class TestDateTimeOperators
         assertFunction("TIMESTAMP '2013-03-31 04:05' - INTERVAL '3' hour", new SqlTimestamp(new DateTime(2013, 3, 31, 0, 5, 0, 0, TIME_ZONE).getMillis(), TIME_ZONE_KEY));
         assertFunction("TIMESTAMP '2013-03-31 03:05' - INTERVAL '2' hour", new SqlTimestamp(new DateTime(2013, 3, 31, 0, 5, 0, 0, TIME_ZONE).getMillis(), TIME_ZONE_KEY));
         assertFunction("TIMESTAMP '2013-03-31 01:05' - INTERVAL '1' hour", new SqlTimestamp(new DateTime(2013, 3, 31, 0, 5, 0, 0, TIME_ZONE).getMillis(), TIME_ZONE_KEY));
+    }
+
+    @Test
+    public void testDateToTimestampCoercing()
+    {
+        assertFunction("date_format(DATE '2013-10-27', '%Y-%m-%d %H:%i:%s')", "2013-10-27 00:00:00");
+
+        assertFunction("DATE '2013-10-27' = TIMESTAMP '2013-10-27 00:00:00'", true);
+        assertFunction("DATE '2013-10-27' < TIMESTAMP '2013-10-27 00:00:01'", true);
+        assertFunction("DATE '2013-10-27' > TIMESTAMP '2013-10-26 23:59:59'", true);
+    }
+
+    @Test
+    public void testDateToTimestampWithZoneCoercing()
+    {
+        assertFunction("DATE '2013-10-27' = TIMESTAMP '2013-10-27 00:00:00 Europe/Berlin'", true);
+        assertFunction("DATE '2013-10-27' < TIMESTAMP '2013-10-27 00:00:01 Europe/Berlin'", true);
+        assertFunction("DATE '2013-10-27' > TIMESTAMP '2013-10-26 23:59:59 Europe/Berlin'", true);
     }
 
     @Test

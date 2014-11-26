@@ -15,8 +15,8 @@ package com.facebook.presto.client;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
-import io.airlift.http.client.AsyncHttpClient;
 import io.airlift.http.client.FullJsonResponseHandler;
+import io.airlift.http.client.HttpClient;
 import io.airlift.http.client.HttpStatus;
 import io.airlift.http.client.Request;
 import io.airlift.json.JsonCodec;
@@ -25,8 +25,10 @@ import javax.annotation.concurrent.ThreadSafe;
 
 import java.io.Closeable;
 import java.net.URI;
+import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
@@ -55,7 +57,7 @@ public class StatementClient
             "/" +
             Objects.firstNonNull(StatementClient.class.getPackage().getImplementationVersion(), "unknown");
 
-    private final AsyncHttpClient httpClient;
+    private final HttpClient httpClient;
     private final FullJsonResponseHandler<QueryResults> responseHandler;
     private final boolean debug;
     private final String query;
@@ -65,7 +67,7 @@ public class StatementClient
     private final AtomicBoolean valid = new AtomicBoolean(true);
     private final String timeZoneId;
 
-    public StatementClient(AsyncHttpClient httpClient, JsonCodec<QueryResults> queryResultsCodec, ClientSession session, String query)
+    public StatementClient(HttpClient httpClient, JsonCodec<QueryResults> queryResultsCodec, ClientSession session, String query)
     {
         checkNotNull(httpClient, "httpClient is null");
         checkNotNull(queryResultsCodec, "queryResultsCodec is null");
@@ -103,6 +105,11 @@ public class StatementClient
         builder.setHeader(PrestoHeaders.PRESTO_TIME_ZONE, session.getTimeZoneId());
         builder.setHeader(PrestoHeaders.PRESTO_LANGUAGE, session.getLocale().toLanguageTag());
         builder.setHeader(USER_AGENT, USER_AGENT_VALUE);
+
+        Map<String, String> property = session.getProperties();
+        for (Entry<String, String> entry : property.entrySet()) {
+            builder.addHeader(PrestoHeaders.PRESTO_SESSION, entry.getKey() + "=" + entry.getValue());
+        }
 
         return builder.build();
     }
@@ -194,8 +201,7 @@ public class StatementClient
             if (response.getStatusCode() != HttpStatus.SERVICE_UNAVAILABLE.code()) {
                 gone.set(true);
                 if (!response.hasValue()) {
-                    throw new RuntimeException(format("Error fetching next at %s returned an invalid response", request.getUri()),
-                            response.getException());
+                    throw new RuntimeException(format("Error fetching next at %s returned an invalid response: %s", request.getUri(), response), response.getException());
                 }
                 throw new RuntimeException(format("Error fetching next at %s returned %s: %s",
                         request.getUri(),

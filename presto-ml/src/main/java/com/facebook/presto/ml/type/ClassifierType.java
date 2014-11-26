@@ -13,9 +13,7 @@
  */
 package com.facebook.presto.ml.type;
 
-import com.facebook.presto.spi.block.BlockEncodingFactory;
-import com.facebook.presto.spi.block.VariableWidthBlockEncoding;
-import com.fasterxml.jackson.annotation.JsonCreator;
+import static com.facebook.presto.type.TypeUtils.parameterizedTypeName;
 
 // Layout is <size>:<model>, where
 //   size: is an int describing the length of the model bytes
@@ -24,22 +22,10 @@ public class ClassifierType
         extends ModelType
 {
     public static final ClassifierType CLASSIFIER = new ClassifierType();
+    public static final String NAME = "Classifier";
 
-    public static final BlockEncodingFactory<?> BLOCK_ENCODING_FACTORY = new VariableWidthBlockEncoding.VariableWidthBlockEncodingFactory(CLASSIFIER);
-
-    @JsonCreator
-    public ClassifierType()
+    private ClassifierType()
     {
-    }
-
-    public static ClassifierType getInstance()
-    {
-        return CLASSIFIER;
-    }
-
-    @Override
-    public String getName()
-    {
-        return "Classifier";
+        super(parameterizedTypeName(NAME));
     }
 }

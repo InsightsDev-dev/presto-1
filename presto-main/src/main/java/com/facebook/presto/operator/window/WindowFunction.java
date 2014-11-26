@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.operator.window;
 
+import com.facebook.presto.operator.PagesIndex;
 import com.facebook.presto.spi.block.BlockBuilder;
 import com.facebook.presto.spi.type.Type;
 
@@ -23,9 +24,11 @@ public interface WindowFunction
     /**
      * Reset state for a new partition (including the first one).
      *
+     * @param partitionStartPosition position of the first row of the partition in the pagesIndex
      * @param partitionRowCount the total number of rows in the new partition
+     * @param pagesIndex the pages index which contains sorted values
      */
-    void reset(int partitionRowCount);
+    void reset(int partitionStartPosition, int partitionRowCount, PagesIndex pagesIndex);
 
     /**
      * Process a row by outputting the result of the window function.

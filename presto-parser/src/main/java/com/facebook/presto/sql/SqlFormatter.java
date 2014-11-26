@@ -16,12 +16,18 @@ package com.facebook.presto.sql;
 import com.facebook.presto.sql.tree.AliasedRelation;
 import com.facebook.presto.sql.tree.AllColumns;
 import com.facebook.presto.sql.tree.AstVisitor;
+import com.facebook.presto.sql.tree.CreateView;
+import com.facebook.presto.sql.tree.DropView;
 import com.facebook.presto.sql.tree.CreateTable;
+import com.facebook.presto.sql.tree.DropTable;
+import com.facebook.presto.sql.tree.Except;
+import com.facebook.presto.sql.tree.Insert;
 import com.facebook.presto.sql.tree.Explain;
 import com.facebook.presto.sql.tree.ExplainFormat;
 import com.facebook.presto.sql.tree.ExplainOption;
 import com.facebook.presto.sql.tree.ExplainType;
 import com.facebook.presto.sql.tree.Expression;
+import com.facebook.presto.sql.tree.Intersect;
 import com.facebook.presto.sql.tree.Join;
 import com.facebook.presto.sql.tree.JoinCriteria;
 import com.facebook.presto.sql.tree.JoinOn;
@@ -31,6 +37,7 @@ import com.facebook.presto.sql.tree.Node;
 import com.facebook.presto.sql.tree.Query;
 import com.facebook.presto.sql.tree.QuerySpecification;
 import com.facebook.presto.sql.tree.Relation;
+import com.facebook.presto.sql.tree.RenameTable;
 import com.facebook.presto.sql.tree.Row;
 import com.facebook.presto.sql.tree.SampledRelation;
 import com.facebook.presto.sql.tree.Select;
@@ -44,12 +51,13 @@ import com.facebook.presto.sql.tree.ShowTables;
 import com.facebook.presto.sql.tree.SingleColumn;
 import com.facebook.presto.sql.tree.Table;
 import com.facebook.presto.sql.tree.TableSubquery;
+import com.facebook.presto.sql.tree.Union;
+import com.facebook.presto.sql.tree.Unnest;
 import com.facebook.presto.sql.tree.Values;
 import com.facebook.presto.sql.tree.With;
 import com.facebook.presto.sql.tree.WithQuery;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
-import com.google.common.collect.Iterables;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -60,6 +68,8 @@ import static com.facebook.presto.sql.ExpressionFormatter.formatExpression;
 import static com.facebook.presto.sql.ExpressionFormatter.formatSortItems;
 import static com.facebook.presto.sql.ExpressionFormatter.formatStringLiteral;
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.collect.Iterables.getOnlyElement;
+import static com.google.common.collect.Iterables.transform;
 
 public final class SqlFormatter
 {
@@ -99,6 +109,13 @@ public final class SqlFormatter
         }
 
         @Override
+        protected Void visitUnnest(Unnest node, Integer indent)
+        {
+            builder.append(node.toString());
+            return null;
+        }
+
+        @Override
         protected Void visitQuery(Query node, Integer indent)
         {
             if (node.getWith().isPresent()) {
@@ -122,7 +139,7 @@ public final class SqlFormatter
                 }
             }
 
-            process(node.getQueryBody(), indent);
+            processRelation(node.getQueryBody(), indent);
 
             if (!node.getOrderBy().isEmpty()) {
                 append(indent, "ORDER BY " + formatSortItems(node.getOrderBy()))
@@ -134,6 +151,12 @@ public final class SqlFormatter
                         .append('\n');
             }
 
+            if (node.getApproximate().isPresent()) {
+                String confidence = node.getApproximate().get().getConfidence();
+                append(indent, "APPROXIMATE AT " + confidence + " CONFIDENCE")
+                        .append('\n');
+            }
+
             return null;
         }
 
@@ -142,24 +165,11 @@ public final class SqlFormatter
         {
             process(node.getSelect(), indent);
 
-            if (node.getFrom() != null) {
+            if (node.getFrom().isPresent()) {
                 append(indent, "FROM");
-                if (node.getFrom().size() > 1) {
-                    builder.append('\n');
-                    append(indent, "  ");
-                    Iterator<Relation> relations = node.getFrom().iterator();
-                    while (relations.hasNext()) {
-                        process(relations.next(), indent);
-                        if (relations.hasNext()) {
-                            builder.append('\n');
-                            append(indent, ", ");
-                        }
-                    }
-                }
-                else {
-                    builder.append(' ');
-                    process(Iterables.getOnlyElement(node.getFrom()), indent);
-                }
+                builder.append('\n');
+                append(indent, "  ");
+                process(node.getFrom().get(), indent);
             }
 
             builder.append('\n');
@@ -170,7 +180,7 @@ public final class SqlFormatter
             }
 
             if (!node.getGroupBy().isEmpty()) {
-                append(indent, "GROUP BY " + Joiner.on(", ").join(Iterables.transform(node.getGroupBy(), expressionFormatterFunction())))
+                append(indent, "GROUP BY " + Joiner.on(", ").join(transform(node.getGroupBy(), expressionFormatterFunction())))
                         .append('\n');
             }
 
@@ -212,7 +222,7 @@ public final class SqlFormatter
             }
             else {
                 builder.append(' ');
-                process(Iterables.getOnlyElement(node.getSelectItems()), indent);
+                process(getOnlyElement(node.getSelectItems()), indent);
             }
 
             builder.append('\n');
@@ -258,31 +268,42 @@ public final class SqlFormatter
                 type = "NATURAL " + type;
             }
 
-            builder.append('(');
+            if (node.getType() != Join.Type.IMPLICIT) {
+                builder.append('(');
+            }
             process(node.getLeft(), indent);
 
             builder.append('\n');
-            append(indent, type).append(" JOIN ");
+            if (node.getType() == Join.Type.IMPLICIT) {
+                append(indent, ", ");
+            }
+            else {
+                append(indent, type).append(" JOIN ");
+            }
 
             process(node.getRight(), indent);
 
-            if (criteria instanceof JoinUsing) {
-                JoinUsing using = (JoinUsing) criteria;
-                builder.append(" USING (")
-                        .append(Joiner.on(", ").join(using.getColumns()))
-                        .append(")");
-            }
-            else if (criteria instanceof JoinOn) {
-                JoinOn on = (JoinOn) criteria;
-                builder.append(" ON (")
-                        .append(formatExpression(on.getExpression()))
-                        .append(")");
-            }
-            else if (node.getType() != Join.Type.CROSS && !(criteria instanceof NaturalJoin)) {
-                throw new UnsupportedOperationException("unknown join criteria: " + criteria);
+            if (node.getType() != Join.Type.CROSS && node.getType() != Join.Type.IMPLICIT) {
+                if (criteria instanceof JoinUsing) {
+                    JoinUsing using = (JoinUsing) criteria;
+                    builder.append(" USING (")
+                            .append(Joiner.on(", ").join(using.getColumns()))
+                            .append(")");
+                }
+                else if (criteria instanceof JoinOn) {
+                    JoinOn on = (JoinOn) criteria;
+                    builder.append(" ON (")
+                            .append(formatExpression(on.getExpression()))
+                            .append(")");
+                }
+                else if (!(criteria instanceof NaturalJoin)) {
+                    throw new UnsupportedOperationException("unknown join criteria: " + criteria);
+                }
             }
 
-            builder.append(")");
+            if (node.getType() != Join.Type.IMPLICIT) {
+                builder.append(")");
+            }
 
             return null;
         }
@@ -343,7 +364,7 @@ public final class SqlFormatter
         protected Void visitRow(Row node, Integer indent)
         {
             builder.append('(')
-                    .append(Joiner.on(", ").join(Iterables.transform(node.getItems(), expressionFormatterFunction())))
+                    .append(Joiner.on(", ").join(transform(node.getItems(), expressionFormatterFunction())))
                     .append(')');
 
             return null;
@@ -357,7 +378,85 @@ public final class SqlFormatter
 
             process(node.getQuery(), indent + 1);
 
-            append(indent, ")");
+            append(indent, ") ");
+
+            return null;
+        }
+
+        @Override
+        protected Void visitUnion(Union node, Integer indent)
+        {
+            Iterator<Relation> relations = node.getRelations().iterator();
+
+            while (relations.hasNext()) {
+                processRelation(relations.next(), indent);
+
+                if (relations.hasNext()) {
+                    builder.append("UNION ");
+                    if (!node.isDistinct()) {
+                        builder.append("ALL ");
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        @Override
+        protected Void visitExcept(Except node, Integer indent)
+        {
+            processRelation(node.getLeft(), indent);
+
+            builder.append("EXCEPT ");
+            if (!node.isDistinct()) {
+                builder.append("ALL ");
+            }
+
+            processRelation(node.getRight(), indent);
+
+            return null;
+        }
+
+        @Override
+        protected Void visitIntersect(Intersect node, Integer indent)
+        {
+            Iterator<Relation> relations = node.getRelations().iterator();
+
+            while (relations.hasNext()) {
+                processRelation(relations.next(), indent);
+
+                if (relations.hasNext()) {
+                    builder.append("INTERSECT ");
+                    if (!node.isDistinct()) {
+                        builder.append("ALL ");
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        @Override
+        protected Void visitCreateView(CreateView node, Integer indent)
+        {
+            builder.append("CREATE ");
+            if (node.isReplace()) {
+                builder.append("OR REPLACE ");
+            }
+            builder.append("VIEW ")
+                    .append(node.getName())
+                    .append(" AS\n");
+
+            process(node.getQuery(), indent);
+
+            return null;
+        }
+
+        @Override
+        protected Void visitDropView(DropView node, Integer context)
+        {
+            builder.append("DROP VIEW ")
+                    .append(node.getName());
 
             return null;
         }
@@ -484,6 +583,51 @@ public final class SqlFormatter
             process(node.getQuery(), indent);
 
             return null;
+        }
+
+        @Override
+        protected Void visitDropTable(DropTable node, Integer context)
+        {
+            builder.append("DROP TABLE ")
+                    .append(node.getTableName());
+
+            return null;
+        }
+
+        @Override
+        protected Void visitRenameTable(RenameTable node, Integer context)
+        {
+            builder.append("ALTER TABLE ")
+                    .append(node.getSource())
+                    .append(" RENAME TO ")
+                    .append(node.getTarget());
+
+            return null;
+        }
+
+        @Override
+        protected Void visitInsert(Insert node, Integer indent)
+        {
+            builder.append("INSERT INTO ")
+                    .append(node.getTarget())
+                    .append(" ");
+
+            process(node.getQuery(), indent);
+
+            return null;
+        }
+
+        private void processRelation(Relation relation, Integer indent)
+        {
+            // TODO: handle this properly
+            if (relation instanceof Table) {
+                builder.append("TABLE ")
+                        .append(((Table) relation).getName())
+                        .append('\n');
+            }
+            else {
+                process(relation, indent);
+            }
         }
 
         private StringBuilder append(int indent, String value)

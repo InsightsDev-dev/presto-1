@@ -13,22 +13,21 @@
  */
 package com.facebook.presto.benchmark;
 
-import com.facebook.presto.operator.FilterAndProjectOperator.FilterAndProjectOperatorFactory;
+import com.facebook.presto.operator.FilterAndProjectOperator;
 import com.facebook.presto.operator.FilterFunction;
+import com.facebook.presto.operator.GenericPageProcessor;
 import com.facebook.presto.operator.OperatorFactory;
 import com.facebook.presto.spi.RecordCursor;
-import com.facebook.presto.spi.block.BlockCursor;
+import com.facebook.presto.spi.block.Block;
+import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.testing.LocalQueryRunner;
 import com.google.common.collect.ImmutableList;
 
 import java.util.List;
-import java.util.concurrent.ExecutorService;
 
 import static com.facebook.presto.benchmark.BenchmarkQueryRunner.createLocalQueryRunner;
 import static com.facebook.presto.operator.ProjectionFunctions.singleColumn;
 import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
-import static io.airlift.concurrent.Threads.daemonThreadsNamed;
-import static java.util.concurrent.Executors.newCachedThreadPool;
 
 public class PredicateFilterBenchmark
         extends AbstractSimpleOperatorBenchmark
@@ -42,10 +41,10 @@ public class PredicateFilterBenchmark
     protected List<? extends OperatorFactory> createOperatorFactories()
     {
         OperatorFactory tableScanOperator = createTableScanOperator(0, "orders", "totalprice");
-        FilterAndProjectOperatorFactory filterAndProjectOperator = new FilterAndProjectOperatorFactory(
+        FilterAndProjectOperator.FilterAndProjectOperatorFactory filterAndProjectOperator = new FilterAndProjectOperator.FilterAndProjectOperatorFactory(
                 1,
-                new DoubleFilter(50000.00),
-                ImmutableList.of(singleColumn(DOUBLE, 0)));
+                new GenericPageProcessor(new DoubleFilter(50000.00), ImmutableList.of(singleColumn(DOUBLE, 0))),
+                ImmutableList.<Type>of(DOUBLE));
 
         return ImmutableList.of(tableScanOperator, filterAndProjectOperator);
     }
@@ -61,9 +60,9 @@ public class PredicateFilterBenchmark
         }
 
         @Override
-        public boolean filter(BlockCursor... cursors)
+        public boolean filter(int position, Block... blocks)
         {
-            return cursors[0].getDouble() >= minValue;
+            return DOUBLE.getDouble(blocks[0], position) >= minValue;
         }
 
         @Override
@@ -75,9 +74,6 @@ public class PredicateFilterBenchmark
 
     public static void main(String[] args)
     {
-        ExecutorService executor = newCachedThreadPool(daemonThreadsNamed("test"));
-        new PredicateFilterBenchmark(createLocalQueryRunner(executor)).runBenchmark(
-                new SimpleLineBenchmarkResultWriter(System.out)
-        );
+        new PredicateFilterBenchmark(createLocalQueryRunner()).runBenchmark(new SimpleLineBenchmarkResultWriter(System.out));
     }
 }

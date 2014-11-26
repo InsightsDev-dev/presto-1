@@ -37,16 +37,9 @@ public interface ConnectorMetadata
     ConnectorTableMetadata getTableMetadata(ConnectorTableHandle table);
 
     /**
-     * Get the names that match the specified table prefix (never null).
+     * List table names, possibly filtered by schema. An empty list is returned if none match.
      */
     List<SchemaTableName> listTables(ConnectorSession session, String schemaNameOrNull);
-
-    /**
-     * Returns a handle for the specified table column, or null if the table does not contain the specified column.
-     *
-     * @throws RuntimeException if table handle is no longer valid
-     */
-    ConnectorColumnHandle getColumnHandle(ConnectorTableHandle tableHandle, String columnName);
 
     /**
      * Returns the handle for the sample weight column, or null if the table does not contain sampled data.
@@ -56,7 +49,7 @@ public interface ConnectorMetadata
     ConnectorColumnHandle getSampleWeightColumnHandle(ConnectorTableHandle tableHandle);
 
     /**
-     * Returns true iff this catalog supports creation of sampled tables
+     * Returns true if this catalog supports creation of sampled tables
      */
     boolean canCreateSampledTables(ConnectorSession session);
 
@@ -92,6 +85,11 @@ public interface ConnectorMetadata
     void dropTable(ConnectorTableHandle tableHandle);
 
     /**
+     * Rename the specified table
+     */
+    void renameTable(ConnectorTableHandle tableHandle, SchemaTableName newTableName);
+
+    /**
      * Begin the atomic creation of a table with data.
      */
     ConnectorOutputTableHandle beginCreateTable(ConnectorSession session, ConnectorTableMetadata tableMetadata);
@@ -100,4 +98,34 @@ public interface ConnectorMetadata
      * Commit a table creation with data after the data is written.
      */
     void commitCreateTable(ConnectorOutputTableHandle tableHandle, Collection<String> fragments);
+
+    /**
+     * Begin insert query
+     */
+    ConnectorInsertTableHandle beginInsert(ConnectorSession session, ConnectorTableHandle tableHandle);
+
+    /**
+     * Commit insert query
+     */
+    void commitInsert(ConnectorInsertTableHandle insertHandle, Collection<String> fragments);
+
+    /**
+     * Create the specified view. The data for the view is opaque to the connector.
+     */
+    void createView(ConnectorSession session, SchemaTableName viewName, String viewData, boolean replace);
+
+    /**
+     * Drop the specified view.
+     */
+    void dropView(ConnectorSession session, SchemaTableName viewName);
+
+    /**
+     * List view names, possibly filtered by schema. An empty list is returned if none match.
+     */
+    List<SchemaTableName> listViews(ConnectorSession session, String schemaNameOrNull);
+
+    /**
+     * Gets the view data for views that match the specified table prefix.
+     */
+    Map<SchemaTableName, String> getViews(ConnectorSession session, SchemaTablePrefix prefix);
 }

@@ -5,12 +5,12 @@
     <parent>
         <groupId>io.airlift</groupId>
         <artifactId>airbase</artifactId>
-        <version>19</version>
+        <version>28</version>
     </parent>
 
     <groupId>com.facebook.presto</groupId>
     <artifactId>presto-root</artifactId>
-    <version>0.69</version>
+    <version>0.82</version>
     <packaging>pom</packaging>
 
     <name>presto-root</name>
@@ -30,17 +30,21 @@
     <scm>
         <connection>scm:git:git://github.com/facebook/presto.git</connection>
         <url>https://github.com/facebook/presto</url>
-        <tag>0.69</tag>
+        <tag>0.82</tag>
     </scm>
 
     <properties>
         <air.main.basedir>${project.basedir}</air.main.basedir>
 
         <air.check.skip-extended>true</air.check.skip-extended>
-        <air.check.skip-license>false</air.check.skip-license>
+        <air.check.skip-license>true</air.check.skip-license>
+
+        <air.check.fail-checkstyle>true</air.check.fail-checkstyle>
+        <air.check.skip-checkstyle>false</air.check.skip-checkstyle>
 
         <dep.antlr.version>3.4</dep.antlr.version>
-        <dep.airlift.version>0.88</dep.airlift.version>
+        <dep.slice.version>0.7</dep.slice.version>
+        <dep.airlift.version>0.96</dep.airlift.version>
         <dep.packaging.version>${dep.airlift.version}</dep.packaging.version>
 
         <cli.skip-execute>true</cli.skip-execute>
@@ -52,25 +56,33 @@
 
     <modules>
         <module>presto-spi</module>
+        <module>presto-kafka</module>
         <module>presto-cassandra</module>
+        <module>presto-orc</module>
         <module>presto-hive</module>
         <module>presto-hive-hadoop1</module>
         <module>presto-hive-hadoop2</module>
         <module>presto-hive-cdh4</module>
         <module>presto-hive-cdh5</module>
-	<module>presto-text</module>
+		<module>presto-text</module>
         <module>presto-proteum</module>
         <module>presto-example-http</module>
         <module>presto-tpch</module>
         <module>presto-raptor</module>
+        <module>presto-base-jdbc</module>
+        <module>presto-mysql</module>
+        <module>presto-postgresql</module>
         <module>presto-client</module>
         <module>presto-parser</module>
         <module>presto-main</module>
         <module>presto-ml</module>
         <module>presto-benchmark</module>
+        <module>presto-tests</module>
         <module>presto-jdbc</module>
         <module>presto-cli</module>
         <module>presto-server</module>
+ 		<module>presto-docs</module>
+        <module>presto-verifier</module>
     </modules>
 
     <dependencyManagement>
@@ -78,6 +90,12 @@
             <dependency>
                 <groupId>com.facebook.presto</groupId>
                 <artifactId>presto-spi</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.facebook.presto</groupId>
+                <artifactId>presto-orc</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -126,11 +144,16 @@
                 <groupId>com.facebook.presto</groupId>
                 <artifactId>presto-tpch</artifactId>
                 <version>${project.version}</version>
-                <type>zip</type>
             </dependency>
             <dependency>
                 <groupId>com.facebook.presto</groupId>
-                <artifactId>presto-tpch</artifactId>
+                <artifactId>presto-base-jdbc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.facebook.presto</groupId>
+                <artifactId>presto-mysql</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -186,9 +209,14 @@
 
             <dependency>
                 <groupId>com.facebook.presto</groupId>
-                <artifactId>presto-server</artifactId>
+                <artifactId>presto-tests</artifactId>
                 <version>${project.version}</version>
-                <type>test-jar</type>
+            </dependency>
+
+            <dependency>
+                <groupId>com.facebook.presto</groupId>
+                <artifactId>presto-benchmark</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
             <dependency>
@@ -212,7 +240,49 @@
             <dependency>
                 <groupId>com.facebook.presto.hive</groupId>
                 <artifactId>hive-apache</artifactId>
-                <version>0.5</version>
+                <version>0.9</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.facebook.hive</groupId>
+                <artifactId>hive-dwrf</artifactId>
+                <version>0.8</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>commons-logging</groupId>
+                        <artifactId>commons-logging</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.iq80.snappy</groupId>
+                        <artifactId>snappy</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>com.facebook.presto.hadoop</groupId>
+                        <artifactId>hadoop-cdh4</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>it.unimi.dsi</groupId>
+                        <artifactId>fastutil</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>com.facebook.hive</groupId>
+                <artifactId>hive-dwrf-shims</artifactId>
+                <version>0.8</version>
+                <exclusions>
+                    <exclusion>
+                        <artifactId>commons-logging</artifactId>
+                        <groupId>commons-logging</groupId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>2.4.1</version>
             </dependency>
 
             <dependency>
@@ -332,7 +402,7 @@
             <dependency>
                 <groupId>io.airlift.tpch</groupId>
                 <artifactId>tpch</artifactId>
-                <version>0.1</version>
+                <version>0.2</version>
             </dependency>
 
             <dependency>
@@ -368,13 +438,25 @@
             <dependency>
                 <groupId>io.airlift</groupId>
                 <artifactId>floatingdecimal</artifactId>
+                <version>0.2</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.iq80.snappy</groupId>
+                <artifactId>snappy</artifactId>
+                <version>0.3</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.openjdk.jol</groupId>
+                <artifactId>jol-core</artifactId>
                 <version>0.1</version>
             </dependency>
 
             <dependency>
-                <groupId>com.intellij</groupId>
+                <groupId>org.jetbrains</groupId>
                 <artifactId>annotations</artifactId>
-                <version>9.0.4</version>
+                <version>13.0</version>
             </dependency>
 
             <dependency>
@@ -390,9 +472,21 @@
             </dependency>
 
             <dependency>
-                <groupId>tw.edu.ntu.csie</groupId>
+                <groupId>com.facebook.thirdparty</groupId>
                 <artifactId>libsvm</artifactId>
-                <version>3.17</version>
+                <version>3.18.1</version>
+            </dependency>
+
+            <dependency>
+                <groupId>mysql</groupId>
+                <artifactId>mysql-connector-java</artifactId>
+                <version>5.1.25</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>9.3-1102-jdbc41</version>
             </dependency>
 
             <dependency>
@@ -422,13 +516,7 @@
             <dependency>
                 <groupId>org.jdbi</groupId>
                 <artifactId>jdbi</artifactId>
-                <version>2.43</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.iq80.snappy</groupId>
-                <artifactId>snappy</artifactId>
-                <version>0.3</version>
+                <version>2.55</version>
             </dependency>
 
             <dependency>
@@ -456,21 +544,9 @@
             </dependency>
 
             <dependency>
-                <groupId>commons-lang</groupId>
-                <artifactId>commons-lang</artifactId>
-                <version>2.6</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.commons</groupId>
-                <artifactId>commons-lang3</artifactId>
-                <version>3.1</version>
-            </dependency>
-
-            <dependency>
                 <groupId>commons-codec</groupId>
                 <artifactId>commons-codec</artifactId>
-                <version>1.7</version>
+                <version>1.9</version>
             </dependency>
 
             <dependency>
@@ -482,21 +558,79 @@
             <dependency>
                 <groupId>io.airlift.discovery</groupId>
                 <artifactId>discovery-server</artifactId>
-                <version>1.17</version>
+                <version>1.20</version>
             </dependency>
 
             <dependency>
                 <groupId>com.amazonaws</groupId>
                 <artifactId>aws-java-sdk</artifactId>
-                <version>1.6.12</version>
+                <version>1.8.9.1</version>
                 <exclusions>
                     <exclusion>
                         <groupId>commons-logging</groupId>
                         <artifactId>commons-logging</artifactId>
                     </exclusion>
+                </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>testing-mysql-server</artifactId>
+                <version>0.1</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>testing-postgresql-server</artifactId>
+                <version>0.3</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>kafka_2.10</artifactId>
+                <version>0.8.1.1</version>
+                <exclusions>
                     <exclusion>
-                        <groupId>joda-time</groupId>
-                        <artifactId>joda-time</artifactId>
+                        <groupId>log4j</groupId>
+                        <artifactId>log4j</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-jdk14</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>org.xerial.snappy</groupId>
+                <artifactId>snappy-java</artifactId>
+                <version>1.1.1.3</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.zookeeper</groupId>
+                <artifactId>zookeeper</artifactId>
+                <version>3.3.6</version>
+                <exclusions>
+                    <exclusion>
+                        <artifactId>junit</artifactId>
+                        <groupId>junit</groupId>
+                    </exclusion>
+                    <exclusion>
+                        <artifactId>log4j</artifactId>
+                        <groupId>log4j</groupId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>com.101tec</groupId>
+                <artifactId>zkclient</artifactId>
+                <version>0.4</version>
+                <exclusions>
+                    <exclusion>
+                        <artifactId>log4j</artifactId>
+                        <groupId>log4j</groupId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -510,10 +644,13 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <configuration combine.children="append">
-                        <argLine>-Duser.timezone=${test.timezone} -Xmx2g -Xms2g -XX:MaxPermSize=512m</argLine>
+                        <argLine>${argLine} -Duser.timezone=${test.timezone} -Xmx2g -Xms2g -XX:MaxPermSize=512m</argLine>
                         <parallel>methods</parallel>
-                        <threadCount>4</threadCount>
-                        <perCoreThreadCount>true</perCoreThreadCount>
+                        <threadCount>8</threadCount>
+                        <systemPropertyVariables>
+                            <user.timezone>${test.timezone}</user.timezone>
+                            <java.util.logging.SimpleFormatter.format>%1$tY-%1$tm-%1$td %1$tH:%1$tM:%1$tS %4$s %5$s%6$s%n</java.util.logging.SimpleFormatter.format>
+                        </systemPropertyVariables>
                     </configuration>
                 </plugin>
 
@@ -596,9 +733,9 @@
                                 </pluginExecution>
                                 <pluginExecution>
                                     <pluginExecutionFilter>
-                                        <groupId>com.mycila</groupId>
-                                        <artifactId>license-maven-plugin</artifactId>
-                                        <versionRange>[2.3,)</versionRange>
+                                        <groupId>com.ning.maven.plugins</groupId>
+                                        <artifactId>maven-duplicate-finder-plugin</artifactId>
+                                        <versionRange>[1.0.4,)</versionRange>
                                         <goals>
                                             <goal>check</goal>
                                         </goals>
@@ -609,11 +746,40 @@
                                 </pluginExecution>
                                 <pluginExecution>
                                     <pluginExecutionFilter>
-                                        <groupId>com.ning.maven.plugins</groupId>
-                                        <artifactId>maven-duplicate-finder-plugin</artifactId>
-                                        <versionRange>[1.0.4,)</versionRange>
+                                        <groupId>org.apache.maven.plugins</groupId>
+                                        <artifactId>maven-checkstyle-plugin</artifactId>
+                                        <versionRange>[2.11,)</versionRange>
                                         <goals>
                                             <goal>check</goal>
+                                        </goals>
+                                    </pluginExecutionFilter>
+                                    <action>
+                                        <ignore />
+                                    </action>
+                                </pluginExecution>
+                                <pluginExecution>
+                                    <pluginExecutionFilter>
+                                        <groupId>io.takari.maven.plugins</groupId>
+                                        <artifactId>presto-maven-plugin</artifactId>
+                                        <versionRange>[0,)</versionRange>
+                                        <goals>
+                                            <goal>generate-service-descriptor</goal>
+                                        </goals>
+                                    </pluginExecutionFilter>
+                                    <action>
+                                        <ignore />
+                                    </action>
+                                </pluginExecution>
+                                <pluginExecution>
+                                    <pluginExecutionFilter>
+                                        <groupId>io.takari.maven.plugins</groupId>
+                                        <artifactId>takari-lifecycle-plugin</artifactId>
+                                        <versionRange>[0,)</versionRange>
+                                        <goals>
+                                            <goal>compile</goal>
+                                            <goal>process-resources</goal>
+                                            <goal>process-test-resources</goal>
+                                            <goal>testCompile</goal>
                                         </goals>
                                     </pluginExecutionFilter>
                                     <action>
@@ -628,26 +794,31 @@
         </pluginManagement>
 
         <plugins>
+            <plugin>
+                <groupId>io.takari.maven.plugins</groupId>
+                <artifactId>presto-maven-plugin</artifactId>
+                <version>0.1.5</version>
+                <extensions>true</extensions>
+            </plugin>
+
+            <plugin>
+                <groupId>io.takari.maven.plugins</groupId>
+                <artifactId>provisio-maven-plugin</artifactId>
+                <version>0.1.11</version>
+                <extensions>true</extensions>
+            </plugin>
         </plugins>
     </build>
 
     <profiles>
-        <!-- run console for development: mvn -q -P console compile exec:java -->
+        <!-- run cli for development: mvn -am -pl presto-cli -P cli compile exec:java -->
         <profile>
-            <id>console</id>
+            <id>cli</id>
             <build>
                 <plugins>
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>console</id>
-                                <goals>
-                                    <goal>java</goal>
-                                </goals>
-                            </execution>
-                        </executions>
                         <configuration>
                             <skip>${cli.skip-execute}</skip>
                             <executable>${java.home}/bin/java</executable>

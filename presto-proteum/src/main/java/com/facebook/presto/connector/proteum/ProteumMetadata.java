@@ -83,12 +83,7 @@ public class ProteumMetadata extends ReadOnlyConnectorMetadata{
         return result;
     }
 
-    @Override
-    public ConnectorColumnHandle getColumnHandle(
-            ConnectorTableHandle tableHandle, String columnName) {
-        // TODO Auto-generated method stub
-        return getColumnHandles(tableHandle).get(columnName);
-    }
+   
 
     @Override
     public ConnectorColumnHandle getSampleWeightColumnHandle(

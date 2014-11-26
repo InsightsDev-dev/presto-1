@@ -13,7 +13,8 @@
  */
 package com.facebook.presto.sql.planner.optimizations;
 
-import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.Session;
+import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.sql.planner.ExpressionSymbolInliner;
 import com.facebook.presto.sql.planner.PlanNodeIdAllocator;
 import com.facebook.presto.sql.planner.Symbol;
@@ -24,7 +25,6 @@ import com.facebook.presto.sql.planner.plan.PlanRewriter;
 import com.facebook.presto.sql.planner.plan.ProjectNode;
 import com.facebook.presto.sql.tree.Expression;
 import com.facebook.presto.sql.tree.ExpressionTreeRewriter;
-import com.facebook.presto.spi.type.Type;
 import com.google.common.collect.ImmutableMap;
 
 import java.util.Map;
@@ -38,7 +38,7 @@ public class MergeProjections
         extends PlanOptimizer
 {
     @Override
-    public PlanNode optimize(PlanNode plan, ConnectorSession session, Map<Symbol, Type> types, SymbolAllocator symbolAllocator, PlanNodeIdAllocator idAllocator)
+    public PlanNode optimize(PlanNode plan, Session session, Map<Symbol, Type> types, SymbolAllocator symbolAllocator, PlanNodeIdAllocator idAllocator)
     {
         checkNotNull(plan, "plan is null");
         checkNotNull(session, "session is null");
@@ -59,15 +59,15 @@ public class MergeProjections
 
             if (source instanceof ProjectNode) {
                 ImmutableMap.Builder<Symbol, Expression> projections = ImmutableMap.builder();
-                for (Map.Entry<Symbol, Expression> projection : node.getOutputMap().entrySet()) {
-                    Expression inlined = ExpressionTreeRewriter.rewriteWith(new ExpressionSymbolInliner(((ProjectNode) source).getOutputMap()), projection.getValue());
+                for (Map.Entry<Symbol, Expression> projection : node.getAssignments().entrySet()) {
+                    Expression inlined = ExpressionTreeRewriter.rewriteWith(new ExpressionSymbolInliner(((ProjectNode) source).getAssignments()), projection.getValue());
                     projections.put(projection.getKey(), inlined);
                 }
 
                 return new ProjectNode(node.getId(), ((ProjectNode) source).getSource(), projections.build());
             }
 
-            return new ProjectNode(node.getId(), source, node.getOutputMap());
+            return new ProjectNode(node.getId(), source, node.getAssignments());
         }
     }
 }

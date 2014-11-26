@@ -141,9 +141,9 @@ public class ProteumClient {
     }
     
     private Type getTypeFromString(String type){
-        if(type.equalsIgnoreCase("int") || type.equalsIgnoreCase("long")) return BigintType.getInstance();
-        if(type.equalsIgnoreCase("double"))return DoubleType.getInstance();
-        else return VarcharType.getInstance();
+        if(type.equalsIgnoreCase("int") || type.equalsIgnoreCase("long")) return BigintType.BIGINT;
+        if(type.equalsIgnoreCase("double"))return DoubleType.DOUBLE;
+        else return VarcharType.VARCHAR;
     }
     
     public void addTable(String schema) throws MalformedURLException{

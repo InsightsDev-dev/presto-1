@@ -24,23 +24,15 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
 
-import static com.facebook.presto.benchmark.BenchmarkQueryRunner.createLocalQueryRunner;
-import static com.facebook.presto.benchmark.BenchmarkQueryRunner.createLocalSampledQueryRunner;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.airlift.concurrent.Threads.daemonThreadsNamed;
-import static java.util.concurrent.Executors.newCachedThreadPool;
 
 public class BenchmarkSuite
 {
     private static final Logger LOGGER = Logger.get(BenchmarkSuite.class);
 
-    public static List<AbstractBenchmark> createBenchmarks(ExecutorService executor)
+    public static List<AbstractBenchmark> createBenchmarks(LocalQueryRunner localQueryRunner)
     {
-        LocalQueryRunner localQueryRunner = createLocalQueryRunner(executor);
-        LocalQueryRunner localSampledQueryRunner = createLocalSampledQueryRunner(executor);
-
         return ImmutableList.<AbstractBenchmark>of(
                 // hand built benchmarks
                 new CountAggregationBenchmark(localQueryRunner),
@@ -79,12 +71,6 @@ public class BenchmarkSuite
                 new SqlApproximatePercentileBenchmark(localQueryRunner),
                 new SqlBetweenBenchmark(localQueryRunner),
 
-                // Sampled sql benchmarks
-                new RenamingBenchmark("sampled_", new GroupBySumWithArithmeticSqlBenchmark(localSampledQueryRunner)),
-                new RenamingBenchmark("sampled_", new CountAggregationSqlBenchmark(localSampledQueryRunner)),
-                new RenamingBenchmark("sampled_", new SqlJoinWithPredicateBenchmark(localSampledQueryRunner)),
-                new RenamingBenchmark("sampled_", new SqlDoubleSumAggregationBenchmark(localSampledQueryRunner)),
-
                 // statistics benchmarks
                 new StatisticsBenchmark.LongVarianceBenchmark(localQueryRunner),
                 new StatisticsBenchmark.LongVariancePopBenchmark(localQueryRunner),
@@ -101,14 +87,16 @@ public class BenchmarkSuite
         );
     }
 
+    private final LocalQueryRunner localQueryRunner;
     private final String outputDirectory;
 
-    public BenchmarkSuite(String outputDirectory)
+    public BenchmarkSuite(LocalQueryRunner localQueryRunner, String outputDirectory)
     {
+        this.localQueryRunner = localQueryRunner;
         this.outputDirectory = checkNotNull(outputDirectory, "outputDirectory is null");
     }
 
-    private File createOutputFile(String fileName)
+    private static File createOutputFile(String fileName)
             throws IOException
     {
         File outputFile = new File(fileName);
@@ -119,36 +107,30 @@ public class BenchmarkSuite
     public void runAllBenchmarks()
             throws IOException
     {
-        ExecutorService executor = newCachedThreadPool(daemonThreadsNamed("test"));
-        try {
-            List<AbstractBenchmark> benchmarks = createBenchmarks(executor);
+        List<AbstractBenchmark> benchmarks = createBenchmarks(localQueryRunner);
 
-            LOGGER.info("=== Pre-running all benchmarks for JVM warmup ===");
-            for (AbstractBenchmark benchmark : benchmarks) {
-                benchmark.runBenchmark();
-            }
-
-            LOGGER.info("=== Actually running benchmarks for metrics ===");
-            for (AbstractBenchmark benchmark : benchmarks) {
-                try (OutputStream jsonOut = new FileOutputStream(createOutputFile(String.format("%s/json/%s.json", outputDirectory, benchmark.getBenchmarkName())));
-                        OutputStream jsonAvgOut = new FileOutputStream(createOutputFile(String.format("%s/json-avg/%s.json", outputDirectory, benchmark.getBenchmarkName())));
-                        OutputStream csvOut = new FileOutputStream(createOutputFile(String.format("%s/csv/%s.csv", outputDirectory, benchmark.getBenchmarkName())));
-                        OutputStream odsOut = new FileOutputStream(createOutputFile(String.format("%s/ods/%s.json", outputDirectory, benchmark.getBenchmarkName())))) {
-                    benchmark.runBenchmark(
-                            new ForwardingBenchmarkResultWriter(
-                                    ImmutableList.of(
-                                            new JsonBenchmarkResultWriter(jsonOut),
-                                            new JsonAvgBenchmarkResultWriter(jsonAvgOut),
-                                            new SimpleLineBenchmarkResultWriter(csvOut),
-                                            new OdsBenchmarkResultWriter("presto.benchmark." + benchmark.getBenchmarkName(), odsOut)
-                                    )
-                            )
-                    );
-                }
-            }
+        LOGGER.info("=== Pre-running all benchmarks for JVM warmup ===");
+        for (AbstractBenchmark benchmark : benchmarks) {
+            benchmark.runBenchmark();
         }
-        finally {
-            executor.shutdownNow();
+
+        LOGGER.info("=== Actually running benchmarks for metrics ===");
+        for (AbstractBenchmark benchmark : benchmarks) {
+            try (OutputStream jsonOut = new FileOutputStream(createOutputFile(String.format("%s/json/%s.json", outputDirectory, benchmark.getBenchmarkName())));
+                    OutputStream jsonAvgOut = new FileOutputStream(createOutputFile(String.format("%s/json-avg/%s.json", outputDirectory, benchmark.getBenchmarkName())));
+                    OutputStream csvOut = new FileOutputStream(createOutputFile(String.format("%s/csv/%s.csv", outputDirectory, benchmark.getBenchmarkName())));
+                    OutputStream odsOut = new FileOutputStream(createOutputFile(String.format("%s/ods/%s.json", outputDirectory, benchmark.getBenchmarkName())))) {
+                benchmark.runBenchmark(
+                        new ForwardingBenchmarkResultWriter(
+                                ImmutableList.of(
+                                        new JsonBenchmarkResultWriter(jsonOut),
+                                        new JsonAvgBenchmarkResultWriter(jsonAvgOut),
+                                        new SimpleLineBenchmarkResultWriter(csvOut),
+                                        new OdsBenchmarkResultWriter("presto.benchmark." + benchmark.getBenchmarkName(), odsOut)
+                                )
+                        )
+                );
+            }
         }
     }
 
@@ -180,12 +162,5 @@ public class BenchmarkSuite
                 benchmarkResultHook.finished();
             }
         }
-    }
-
-    public static void main(String[] args)
-            throws IOException
-    {
-        String outputDirectory = checkNotNull(System.getProperty("outputDirectory"), "Must specify -DoutputDirectory=...");
-        new BenchmarkSuite(outputDirectory).runAllBenchmarks();
     }
 }

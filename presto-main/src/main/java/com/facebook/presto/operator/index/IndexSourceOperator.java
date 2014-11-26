@@ -14,19 +14,20 @@
 package com.facebook.presto.operator.index;
 
 import com.facebook.presto.metadata.Split;
+import com.facebook.presto.operator.PageSourceOperator;
 import com.facebook.presto.operator.DriverContext;
 import com.facebook.presto.operator.FinishedOperator;
 import com.facebook.presto.operator.Operator;
 import com.facebook.presto.operator.OperatorContext;
-import com.facebook.presto.operator.Page;
-import com.facebook.presto.operator.RecordProjectOperator;
 import com.facebook.presto.operator.SourceOperator;
 import com.facebook.presto.operator.SourceOperatorFactory;
 import com.facebook.presto.spi.Index;
+import com.facebook.presto.spi.Page;
+import com.facebook.presto.spi.RecordPageSource;
 import com.facebook.presto.spi.RecordSet;
 import com.facebook.presto.spi.type.Type;
-import com.facebook.presto.split.MappedRecordSet;
 import com.facebook.presto.sql.planner.plan.PlanNodeId;
+import com.google.common.base.Function;
 import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -35,7 +36,7 @@ import javax.annotation.concurrent.GuardedBy;
 
 import java.util.List;
 
-import static com.google.common.base.Preconditions.checkArgument;
+import static com.facebook.presto.util.Types.checkType;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -49,7 +50,7 @@ public class IndexSourceOperator
         private final PlanNodeId sourceId;
         private final Index index;
         private final List<Type> types;
-        private final List<Integer> probeKeyRemap;
+        private final Function<RecordSet, RecordSet> probeKeyNormalizer;
         private boolean closed;
 
         public IndexSourceOperatorFactory(
@@ -57,13 +58,13 @@ public class IndexSourceOperator
                 PlanNodeId sourceId,
                 Index index,
                 List<Type> types,
-                List<Integer> probeKeyRemap)
+                Function<RecordSet, RecordSet> probeKeyNormalizer)
         {
             this.operatorId = operatorId;
             this.sourceId = checkNotNull(sourceId, "sourceId is null");
             this.index = checkNotNull(index, "index is null");
             this.types = checkNotNull(types, "types is null");
-            this.probeKeyRemap = ImmutableList.copyOf(checkNotNull(probeKeyRemap, "probeKeyRemap is null"));
+            this.probeKeyNormalizer = checkNotNull(probeKeyNormalizer, "probeKeyNormalizer is null");
         }
 
         @Override
@@ -88,7 +89,7 @@ public class IndexSourceOperator
                     sourceId,
                     index,
                     types,
-                    probeKeyRemap);
+                    probeKeyNormalizer);
         }
 
         @Override
@@ -102,7 +103,7 @@ public class IndexSourceOperator
     private final PlanNodeId planNodeId;
     private final Index index;
     private final List<Type> types;
-    private final List<Integer> probeKeyRemap;
+    private final Function<RecordSet, RecordSet> probeKeyNormalizer;
 
     @GuardedBy("this")
     private Operator source;
@@ -112,13 +113,13 @@ public class IndexSourceOperator
             PlanNodeId planNodeId,
             Index index,
             List<Type> types,
-            List<Integer> probeKeyRemap)
+            Function<RecordSet, RecordSet> probeKeyNormalizer)
     {
         this.operatorContext = checkNotNull(operatorContext, "operatorContext is null");
         this.planNodeId = checkNotNull(planNodeId, "planNodeId is null");
         this.index = checkNotNull(index, "index is null");
         this.types = ImmutableList.copyOf(checkNotNull(types, "types is null"));
-        this.probeKeyRemap = ImmutableList.copyOf(checkNotNull(probeKeyRemap, "probeKeyRemap is null"));
+        this.probeKeyNormalizer = checkNotNull(probeKeyNormalizer, "probeKeyNormalizer is null");
     }
 
     @Override
@@ -137,15 +138,15 @@ public class IndexSourceOperator
     public synchronized void addSplit(Split split)
     {
         checkNotNull(split, "split is null");
-        checkArgument(split.getConnectorSplit() instanceof IndexSplit, "Split must be instance of IndexSplit");
+        checkType(split.getConnectorSplit(), IndexSplit.class, "connectorSplit");
         checkState(getSource() == null, "Index source split already set");
 
         IndexSplit indexSplit = (IndexSplit) split.getConnectorSplit();
 
-        // Remap the record set into the format the index is expecting
-        RecordSet recordSet = new MappedRecordSet(indexSplit.getKeyRecordSet(), probeKeyRemap);
-        RecordSet result = index.lookup(recordSet);
-        source = new RecordProjectOperator(operatorContext, result);
+        // Normalize the incoming RecordSet to something that can be consumed by the index
+        RecordSet normalizedRecordSet = probeKeyNormalizer.apply(indexSplit.getKeyRecordSet());
+        RecordSet result = index.lookup(normalizedRecordSet);
+        source = new PageSourceOperator(new RecordPageSource(result), result.getColumnTypes(), operatorContext);
 
         operatorContext.setInfoSupplier(Suppliers.ofInstance(split.getInfo()));
     }

@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.operator.window;
 
+import com.facebook.presto.operator.PagesIndex;
 import com.facebook.presto.spi.block.BlockBuilder;
 import com.facebook.presto.spi.type.Type;
 
@@ -31,7 +32,7 @@ public class CumulativeDistributionFunction
     }
 
     @Override
-    public void reset(int partitionRowCount)
+    public void reset(int partitionStartPosition, int partitionRowCount, PagesIndex pagesIndex)
     {
         totalCount = partitionRowCount;
         count = 0;
@@ -43,6 +44,6 @@ public class CumulativeDistributionFunction
         if (newPeerGroup) {
             count += peerGroupCount;
         }
-        output.appendDouble(((double) count) / totalCount);
+        DOUBLE.writeDouble(output, ((double) count) / totalCount);
     }
 }

@@ -49,8 +49,8 @@ public class TextMetadata extends ReadOnlyConnectorMetadata{
     public ConnectorTableMetadata getTableMetadata(ConnectorTableHandle table) {
         TextTableHandle textTable = (TextTableHandle)table;
         // TODO Auto-generated method stub
-        ColumnMetadata column1 = new ColumnMetadata("a", BigintType.getInstance(), 0, false);
-        ColumnMetadata column2 = new ColumnMetadata("b", BigintType.getInstance(), 1, false);
+        ColumnMetadata column1 = new ColumnMetadata("a", BigintType.BIGINT, 0, false);
+        ColumnMetadata column2 = new ColumnMetadata("b", BigintType.BIGINT, 1, false);
         List<ColumnMetadata> columns = new ArrayList<ColumnMetadata>();
         columns.add(column1);columns.add(column2);
         SchemaTableName tableName = new SchemaTableName(textTable.getSchemaName(), textTable.getTableName());
@@ -67,13 +67,6 @@ public class TextMetadata extends ReadOnlyConnectorMetadata{
         List<SchemaTableName> table = new ArrayList<SchemaTableName>();
         table.add(schemaTableName);
         return table;
-    }
-
-    @Override
-    public ConnectorColumnHandle getColumnHandle(
-            ConnectorTableHandle tableHandle, String columnName) {
-        // TODO Auto-generated method stub
-        return getColumnHandles(tableHandle).get(columnName);
     }
 
     @Override

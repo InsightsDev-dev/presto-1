@@ -16,16 +16,12 @@ package com.facebook.presto.benchmark;
 import com.facebook.presto.operator.OperatorFactory;
 import com.facebook.presto.operator.TopNOperator.TopNOperatorFactory;
 import com.facebook.presto.testing.LocalQueryRunner;
-import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 
 import java.util.List;
-import java.util.concurrent.ExecutorService;
 
 import static com.facebook.presto.benchmark.BenchmarkQueryRunner.createLocalQueryRunner;
 import static com.facebook.presto.spi.block.SortOrder.ASC_NULLS_LAST;
-import static io.airlift.concurrent.Threads.daemonThreadsNamed;
-import static java.util.concurrent.Executors.newCachedThreadPool;
 
 public class Top100Benchmark
         extends AbstractSimpleOperatorBenchmark
@@ -45,16 +41,12 @@ public class Top100Benchmark
                 100,
                 ImmutableList.of(0),
                 ImmutableList.of(ASC_NULLS_LAST),
-                Optional.<Integer>absent(),
                 false);
         return ImmutableList.of(tableScanOperator, topNOperator);
     }
 
     public static void main(String[] args)
     {
-        ExecutorService executor = newCachedThreadPool(daemonThreadsNamed("test"));
-        new Top100Benchmark(createLocalQueryRunner(executor)).runBenchmark(
-                new SimpleLineBenchmarkResultWriter(System.out)
-        );
+        new Top100Benchmark(createLocalQueryRunner()).runBenchmark(new SimpleLineBenchmarkResultWriter(System.out));
     }
 }

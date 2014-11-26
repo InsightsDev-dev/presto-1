@@ -16,24 +16,19 @@ package com.facebook.presto.type;
 import com.facebook.presto.operator.scalar.ScalarOperator;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.PrestoException;
-import com.facebook.presto.spi.type.BooleanType;
-import com.facebook.presto.spi.type.TimeType;
-import com.facebook.presto.spi.type.TimeWithTimeZoneType;
-import com.facebook.presto.spi.type.TimestampType;
-import com.facebook.presto.spi.type.TimestampWithTimeZoneType;
-import com.facebook.presto.spi.type.VarcharType;
+import com.facebook.presto.spi.type.StandardTypes;
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
 
-import static com.facebook.presto.metadata.OperatorInfo.OperatorType.BETWEEN;
-import static com.facebook.presto.metadata.OperatorInfo.OperatorType.CAST;
-import static com.facebook.presto.metadata.OperatorInfo.OperatorType.EQUAL;
-import static com.facebook.presto.metadata.OperatorInfo.OperatorType.GREATER_THAN;
-import static com.facebook.presto.metadata.OperatorInfo.OperatorType.GREATER_THAN_OR_EQUAL;
-import static com.facebook.presto.metadata.OperatorInfo.OperatorType.HASH_CODE;
-import static com.facebook.presto.metadata.OperatorInfo.OperatorType.LESS_THAN;
-import static com.facebook.presto.metadata.OperatorInfo.OperatorType.LESS_THAN_OR_EQUAL;
-import static com.facebook.presto.metadata.OperatorInfo.OperatorType.NOT_EQUAL;
+import static com.facebook.presto.metadata.OperatorType.BETWEEN;
+import static com.facebook.presto.metadata.OperatorType.CAST;
+import static com.facebook.presto.metadata.OperatorType.EQUAL;
+import static com.facebook.presto.metadata.OperatorType.GREATER_THAN;
+import static com.facebook.presto.metadata.OperatorType.GREATER_THAN_OR_EQUAL;
+import static com.facebook.presto.metadata.OperatorType.HASH_CODE;
+import static com.facebook.presto.metadata.OperatorType.LESS_THAN;
+import static com.facebook.presto.metadata.OperatorType.LESS_THAN_OR_EQUAL;
+import static com.facebook.presto.metadata.OperatorType.NOT_EQUAL;
 import static com.facebook.presto.spi.StandardErrorCode.INVALID_CAST_ARGUMENT;
 import static com.facebook.presto.spi.type.DateTimeEncoding.packDateTimeWithZone;
 import static com.facebook.presto.util.DateTimeUtils.parseTimeWithoutTimeZone;
@@ -47,96 +42,97 @@ public final class TimeOperators
     }
 
     @ScalarOperator(EQUAL)
-    @SqlType(BooleanType.class)
-    public static boolean equal(@SqlType(TimeType.class) long left, @SqlType(TimeType.class) long right)
+    @SqlType(StandardTypes.BOOLEAN)
+    public static boolean equal(@SqlType(StandardTypes.TIME) long left, @SqlType(StandardTypes.TIME) long right)
     {
         return left == right;
     }
 
     @ScalarOperator(NOT_EQUAL)
-    @SqlType(BooleanType.class)
-    public static boolean notEqual(@SqlType(TimeType.class) long left, @SqlType(TimeType.class) long right)
+    @SqlType(StandardTypes.BOOLEAN)
+    public static boolean notEqual(@SqlType(StandardTypes.TIME) long left, @SqlType(StandardTypes.TIME) long right)
     {
         return left != right;
     }
 
     @ScalarOperator(LESS_THAN)
-    @SqlType(BooleanType.class)
-    public static boolean lessThan(@SqlType(TimeType.class) long left, @SqlType(TimeType.class) long right)
+    @SqlType(StandardTypes.BOOLEAN)
+    public static boolean lessThan(@SqlType(StandardTypes.TIME) long left, @SqlType(StandardTypes.TIME) long right)
     {
         return left < right;
     }
 
     @ScalarOperator(LESS_THAN_OR_EQUAL)
-    @SqlType(BooleanType.class)
-    public static boolean lessThanOrEqual(@SqlType(TimeType.class) long left, @SqlType(TimeType.class) long right)
+    @SqlType(StandardTypes.BOOLEAN)
+    public static boolean lessThanOrEqual(@SqlType(StandardTypes.TIME) long left, @SqlType(StandardTypes.TIME) long right)
     {
         return left <= right;
     }
 
     @ScalarOperator(GREATER_THAN)
-    @SqlType(BooleanType.class)
-    public static boolean greaterThan(@SqlType(TimeType.class) long left, @SqlType(TimeType.class) long right)
+    @SqlType(StandardTypes.BOOLEAN)
+    public static boolean greaterThan(@SqlType(StandardTypes.TIME) long left, @SqlType(StandardTypes.TIME) long right)
     {
         return left > right;
     }
 
     @ScalarOperator(GREATER_THAN_OR_EQUAL)
-    @SqlType(BooleanType.class)
-    public static boolean greaterThanOrEqual(@SqlType(TimeType.class) long left, @SqlType(TimeType.class) long right)
+    @SqlType(StandardTypes.BOOLEAN)
+    public static boolean greaterThanOrEqual(@SqlType(StandardTypes.TIME) long left, @SqlType(StandardTypes.TIME) long right)
     {
         return left >= right;
     }
 
     @ScalarOperator(BETWEEN)
-    @SqlType(BooleanType.class)
-    public static boolean between(@SqlType(TimeType.class) long value, @SqlType(TimeType.class) long min, @SqlType(TimeType.class) long max)
+    @SqlType(StandardTypes.BOOLEAN)
+    public static boolean between(@SqlType(StandardTypes.TIME) long value, @SqlType(StandardTypes.TIME) long min, @SqlType(StandardTypes.TIME) long max)
     {
         return min <= value && value <= max;
     }
 
     @ScalarOperator(CAST)
-    @SqlType(TimeWithTimeZoneType.class)
-    public static long castToTimeWithTimeZone(ConnectorSession session, @SqlType(TimeType.class) long value)
+    @SqlType(StandardTypes.TIME_WITH_TIME_ZONE)
+    public static long castToTimeWithTimeZone(ConnectorSession session, @SqlType(StandardTypes.TIME) long value)
     {
         return packDateTimeWithZone(value, session.getTimeZoneKey());
     }
 
     @ScalarOperator(CAST)
-    @SqlType(TimestampType.class)
-    public static long castToTimestamp(@SqlType(TimeType.class) long value)
+    @SqlType(StandardTypes.TIMESTAMP)
+    public static long castToTimestamp(@SqlType(StandardTypes.TIME) long value)
     {
         return value;
     }
 
     @ScalarOperator(CAST)
-    @SqlType(TimestampWithTimeZoneType.class)
-    public static long castToTimestampWithTimeZone(ConnectorSession session, @SqlType(TimeType.class) long value)
+    @SqlType(StandardTypes.TIMESTAMP_WITH_TIME_ZONE)
+    public static long castToTimestampWithTimeZone(ConnectorSession session, @SqlType(StandardTypes.TIME) long value)
     {
         return packDateTimeWithZone(value, session.getTimeZoneKey());
     }
 
     @ScalarOperator(CAST)
-    @SqlType(VarcharType.class)
-    public static Slice castToSlice(ConnectorSession session, @SqlType(TimeType.class) long value)
+    @SqlType(StandardTypes.VARCHAR)
+    public static Slice castToSlice(ConnectorSession session, @SqlType(StandardTypes.TIME) long value)
     {
         return Slices.copiedBuffer(printTimeWithoutTimeZone(session.getTimeZoneKey(), value), UTF_8);
     }
 
     @ScalarOperator(CAST)
-    @SqlType(TimeType.class)
-    public static long castFromSlice(ConnectorSession session, @SqlType(VarcharType.class) Slice value)
+    @SqlType(StandardTypes.TIME)
+    public static long castFromSlice(ConnectorSession session, @SqlType(StandardTypes.VARCHAR) Slice value)
     {
         try {
             return parseTimeWithoutTimeZone(session.getTimeZoneKey(), value.toStringUtf8());
         }
         catch (IllegalArgumentException e) {
-            throw new PrestoException(INVALID_CAST_ARGUMENT.toErrorCode(), e);
+            throw new PrestoException(INVALID_CAST_ARGUMENT, e);
         }
     }
 
     @ScalarOperator(HASH_CODE)
-    public static int hashCode(@SqlType(TimeType.class) long value)
+    @SqlType(StandardTypes.BIGINT)
+    public static long hashCode(@SqlType(StandardTypes.TIME) long value)
     {
         return (int) (value ^ (value >>> 32));
     }

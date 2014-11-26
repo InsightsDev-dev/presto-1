@@ -15,6 +15,7 @@ package com.facebook.presto.sql.analyzer;
 
 import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.sql.tree.ArithmeticExpression;
+import com.facebook.presto.sql.tree.ArrayConstructor;
 import com.facebook.presto.sql.tree.AstVisitor;
 import com.facebook.presto.sql.tree.BetweenPredicate;
 import com.facebook.presto.sql.tree.Cast;
@@ -41,6 +42,8 @@ import com.facebook.presto.sql.tree.QualifiedNameReference;
 import com.facebook.presto.sql.tree.SearchedCaseExpression;
 import com.facebook.presto.sql.tree.SimpleCaseExpression;
 import com.facebook.presto.sql.tree.SortItem;
+import com.facebook.presto.sql.tree.SubqueryExpression;
+import com.facebook.presto.sql.tree.SubscriptExpression;
 import com.facebook.presto.sql.tree.WhenClause;
 import com.facebook.presto.sql.tree.Window;
 import com.facebook.presto.sql.tree.WindowFrame;
@@ -63,6 +66,7 @@ import static com.facebook.presto.sql.analyzer.FieldOrExpression.isFieldReferenc
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.MUST_BE_AGGREGATE_OR_GROUP_BY;
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.NESTED_AGGREGATION;
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.NESTED_WINDOW;
+import static com.facebook.presto.sql.analyzer.SemanticErrorCode.NOT_SUPPORTED;
 import static com.google.common.base.Predicates.equalTo;
 import static com.google.common.base.Predicates.instanceOf;
 
@@ -93,9 +97,9 @@ public class AggregationAnalyzer
                 .transform(expressionGetter())
                 .list();
 
-        ImmutableList.Builder<Integer> fields = ImmutableList.builder();
+        ImmutableList.Builder<Integer> fieldIndexes = ImmutableList.builder();
 
-        fields.addAll(IterableTransformer.on(groupByExpressions)
+        fieldIndexes.addAll(IterableTransformer.on(groupByExpressions)
                 .select(isFieldReferencePredicate())
                 .transform(fieldIndexGetter())
                 .all());
@@ -106,15 +110,16 @@ public class AggregationAnalyzer
         for (Expression expression : Iterables.filter(expressions, instanceOf(QualifiedNameReference.class))) {
             QualifiedName name = ((QualifiedNameReference) expression).getName();
 
-            List<Integer> fieldIndexes = tupleDescriptor.resolveFieldIndexes(name);
-            Preconditions.checkState(fieldIndexes.size() <= 1, "Found more than one field for name '%s': %s", name, fieldIndexes);
+            List<Field> fields = tupleDescriptor.resolveFields(name);
+            Preconditions.checkState(fields.size() <= 1, "Found more than one field for name '%s': %s", name, fields);
 
-            if (fieldIndexes.size() == 1) {
-                fields.add(Iterables.getOnlyElement(fieldIndexes));
+            if (fields.size() == 1) {
+                Field field = Iterables.getOnlyElement(fields);
+                fieldIndexes.add(tupleDescriptor.indexOf(field));
             }
         }
 
-        this.fieldIndexes = fields.build();
+        this.fieldIndexes = fieldIndexes.build();
     }
 
     public boolean analyze(int fieldIndex)
@@ -149,6 +154,25 @@ public class AggregationAnalyzer
         protected Boolean visitExpression(Expression node, Void context)
         {
             throw new UnsupportedOperationException("aggregation analysis not yet implemented for: " + node.getClass().getName());
+        }
+
+        @Override
+        protected Boolean visitSubqueryExpression(SubqueryExpression node, Void context)
+        {
+            throw new SemanticException(NOT_SUPPORTED, node, "Scalar subqueries not yet supported");
+        }
+
+        @Override
+        protected Boolean visitSubscriptExpression(SubscriptExpression node, Void context)
+        {
+            return process(node.getBase(), context) &&
+                    process(node.getIndex(), context);
+        }
+
+        @Override
+        protected Boolean visitArrayConstructor(ArrayConstructor node, Void context)
+        {
+            return Iterables.all(node.getValues(), isConstantPredicate());
         }
 
         @Override
@@ -328,11 +352,12 @@ public class AggregationAnalyzer
         {
             QualifiedName name = node.getName();
 
-            List<Integer> indexes = tupleDescriptor.resolveFieldIndexes(name);
-            Preconditions.checkState(!indexes.isEmpty(), "No fields for name '%s'", name);
-            Preconditions.checkState(indexes.size() <= 1, "Found more than one field for name '%s': %s", name, indexes);
+            List<Field> fields = tupleDescriptor.resolveFields(name);
+            Preconditions.checkState(!fields.isEmpty(), "No fields for name '%s'", name);
+            Preconditions.checkState(fields.size() <= 1, "Found more than one field for name '%s': %s", name, fields);
 
-            return fieldIndexes.contains(Iterables.getOnlyElement(indexes));
+            Field field = Iterables.getOnlyElement(fields);
+            return fieldIndexes.contains(tupleDescriptor.indexOf(field));
         }
 
         @Override

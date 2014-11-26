@@ -27,6 +27,7 @@ import com.google.common.base.Optional;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 
 import javax.annotation.Nullable;
@@ -90,7 +91,6 @@ public class TableScanNode
         checkNotNull(outputSymbols, "outputSymbols is null");
         checkNotNull(assignments, "assignments is null");
         checkArgument(assignments.keySet().containsAll(outputSymbols), "assignments does not cover all of outputSymbols");
-        checkArgument(!assignments.isEmpty(), "assignments is empty");
         checkNotNull(summarizedPartition, "summarizedPartition is null");
 
         this.table = table;
@@ -99,7 +99,7 @@ public class TableScanNode
         this.originalConstraint = originalConstraint;
         this.summarizedPartition = summarizedPartition;
         this.partitionsDroppedBySerialization = partitionsDroppedBySerialization;
-        checkArgument(summarizedPartition.getPartitionDomainSummary().isNone() || assignments.values().containsAll(summarizedPartition.getPartitionDomainSummary().getDomains().keySet()), "Assignments do not include all of the ColumnHandles specified by the Partitions");
+        checkArgument(summarizedPartition.getPartitionDomainSummary().isNone() || ImmutableSet.copyOf(assignments.values()).containsAll(summarizedPartition.getPartitionDomainSummary().getDomains().keySet()), "Assignments do not include all of the ColumnHandles specified by the Partitions");
     }
 
     @JsonProperty("table")
@@ -108,6 +108,7 @@ public class TableScanNode
         return table;
     }
 
+    @Override
     @JsonProperty("outputSymbols")
     public List<Symbol> getOutputSymbols()
     {
@@ -163,11 +164,13 @@ public class TableScanNode
         return builder.toString();
     }
 
+    @Override
     public List<PlanNode> getSources()
     {
         return ImmutableList.of();
     }
 
+    @Override
     public <C, R> R accept(PlanVisitor<C, R> visitor, C context)
     {
         return visitor.visitTableScan(this, context);

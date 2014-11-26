@@ -16,6 +16,8 @@ package com.facebook.presto.connector.textfile;
 import com.facebook.presto.spi.ConnectorColumnHandle;
 import com.facebook.presto.spi.ConnectorHandleResolver;
 import com.facebook.presto.spi.ConnectorIndexHandle;
+import com.facebook.presto.spi.ConnectorInsertTableHandle;
+import com.facebook.presto.spi.ConnectorOutputTableHandle;
 import com.facebook.presto.spi.ConnectorSplit;
 import com.facebook.presto.spi.ConnectorTableHandle;
 
@@ -67,6 +69,28 @@ public class TextHandleResolver implements ConnectorHandleResolver{
     public Class<? extends ConnectorSplit> getSplitClass() {
         // TODO Auto-generated method stub
         return TextSplit.class;
+    }
+
+    @Override
+    public boolean canHandle(ConnectorOutputTableHandle tableHandle) {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public boolean canHandle(ConnectorInsertTableHandle tableHandle) {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public Class<? extends ConnectorOutputTableHandle> getOutputTableHandleClass() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Class<? extends ConnectorInsertTableHandle> getInsertTableHandleClass() {
+        throw new UnsupportedOperationException();
     }
 
 }

@@ -21,7 +21,7 @@ import com.facebook.presto.spi.Connector;
 import com.facebook.presto.spi.ConnectorHandleResolver;
 import com.facebook.presto.spi.ConnectorIndexResolver;
 import com.facebook.presto.spi.ConnectorMetadata;
-import com.facebook.presto.spi.ConnectorOutputHandleResolver;
+import com.facebook.presto.spi.ConnectorPageSourceProvider;
 import com.facebook.presto.spi.ConnectorRecordSetProvider;
 import com.facebook.presto.spi.ConnectorRecordSinkProvider;
 import com.facebook.presto.spi.ConnectorSplitManager;
@@ -76,14 +76,13 @@ public class ProteumConnector  implements Connector
     }
 
     @Override
-    public ConnectorOutputHandleResolver getOutputHandleResolver()
+    public ConnectorIndexResolver getIndexResolver()
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public ConnectorIndexResolver getIndexResolver()
-    {
+    public ConnectorPageSourceProvider getPageSourceProvider() {
         throw new UnsupportedOperationException();
     }
 }

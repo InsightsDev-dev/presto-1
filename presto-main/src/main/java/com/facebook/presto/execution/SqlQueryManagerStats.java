@@ -15,9 +15,13 @@ package com.facebook.presto.execution;
 
 import com.facebook.presto.spi.StandardErrorCode;
 import io.airlift.stats.CounterStat;
-import io.airlift.stats.DistributionStat;
+import io.airlift.stats.TimeStat;
 import org.weakref.jmx.Managed;
 import org.weakref.jmx.Nested;
+
+import static com.facebook.presto.spi.StandardErrorCode.ABANDONED_QUERY;
+import static com.facebook.presto.spi.StandardErrorCode.USER_CANCELED;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 public class SqlQueryManagerStats
 {
@@ -30,7 +34,7 @@ public class SqlQueryManagerStats
     private final CounterStat internalFailures = new CounterStat();
     private final CounterStat externalFailures = new CounterStat();
     private final CounterStat insufficientResourcesFailures = new CounterStat();
-    private final DistributionStat executionTime = new DistributionStat();
+    private final TimeStat executionTime = new TimeStat(MILLISECONDS);
 
     public void queryStarted()
     {
@@ -40,14 +44,14 @@ public class SqlQueryManagerStats
     public void queryFinished(QueryInfo info)
     {
         completedQueries.update(1);
-        executionTime.add(info.getQueryStats().getEndTime().getMillis() - info.getQueryStats().getCreateTime().getMillis());
+        executionTime.add(info.getQueryStats().getEndTime().getMillis() - info.getQueryStats().getCreateTime().getMillis(), MILLISECONDS);
 
         if (info.getErrorCode() != null) {
             switch (StandardErrorCode.toErrorType(info.getErrorCode().getCode())) {
                 case USER_ERROR:
                     userErrorFailures.update(1);
                     break;
-                case INTERNAL:
+                case INTERNAL_ERROR:
                     internalFailures.update(1);
                     break;
                 case INSUFFICIENT_RESOURCES:
@@ -58,10 +62,10 @@ public class SqlQueryManagerStats
                     break;
             }
 
-            if (info.getErrorCode().getCode() == StandardErrorCode.ABANDONED_QUERY.toErrorCode().getCode()) {
+            if (info.getErrorCode().getCode() == ABANDONED_QUERY.toErrorCode().getCode()) {
                 abandonedQueries.update(1);
             }
-            else if (info.getErrorCode().getCode() == StandardErrorCode.USER_CANCELED.toErrorCode().getCode()) {
+            else if (info.getErrorCode().getCode() == USER_CANCELED.toErrorCode().getCode()) {
                 canceledQueries.update(1);
             }
             failedQueries.update(1);
@@ -97,7 +101,7 @@ public class SqlQueryManagerStats
 
     @Managed
     @Nested
-    public DistributionStat getExecutionTime()
+    public TimeStat getExecutionTime()
     {
         return executionTime;
     }

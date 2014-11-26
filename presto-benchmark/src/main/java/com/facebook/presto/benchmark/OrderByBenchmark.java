@@ -17,16 +17,12 @@ import com.facebook.presto.operator.LimitOperator.LimitOperatorFactory;
 import com.facebook.presto.operator.OperatorFactory;
 import com.facebook.presto.operator.OrderByOperator.OrderByOperatorFactory;
 import com.facebook.presto.testing.LocalQueryRunner;
-import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 
 import java.util.List;
-import java.util.concurrent.ExecutorService;
 
 import static com.facebook.presto.benchmark.BenchmarkQueryRunner.createLocalQueryRunner;
 import static com.facebook.presto.spi.block.SortOrder.ASC_NULLS_LAST;
-import static io.airlift.concurrent.Threads.daemonThreadsNamed;
-import static java.util.concurrent.Executors.newCachedThreadPool;
 
 public class OrderByBenchmark
         extends AbstractSimpleOperatorBenchmark
@@ -43,7 +39,7 @@ public class OrderByBenchmark
     {
         OperatorFactory tableScanOperator = createTableScanOperator(0, "orders", "totalprice", "clerk");
 
-        LimitOperatorFactory limitOperator = new LimitOperatorFactory(1, tableScanOperator.getTypes(), ROWS, Optional.<Integer>absent());
+        LimitOperatorFactory limitOperator = new LimitOperatorFactory(1, tableScanOperator.getTypes(), ROWS);
 
         OrderByOperatorFactory orderByOperator = new OrderByOperatorFactory(
                 2,
@@ -58,9 +54,6 @@ public class OrderByBenchmark
 
     public static void main(String[] args)
     {
-        ExecutorService executor = newCachedThreadPool(daemonThreadsNamed("test"));
-        new OrderByBenchmark(createLocalQueryRunner(executor)).runBenchmark(
-                new SimpleLineBenchmarkResultWriter(System.out)
-        );
+        new OrderByBenchmark(createLocalQueryRunner()).runBenchmark(new SimpleLineBenchmarkResultWriter(System.out));
     }
 }

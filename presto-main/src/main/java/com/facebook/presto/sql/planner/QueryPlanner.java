@@ -13,9 +13,9 @@
  */
 package com.facebook.presto.sql.planner;
 
+import com.facebook.presto.Session;
 import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.metadata.Signature;
-import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.block.SortOrder;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.sql.analyzer.Analysis;
@@ -77,9 +77,9 @@ class QueryPlanner
     private final SymbolAllocator symbolAllocator;
     private final PlanNodeIdAllocator idAllocator;
     private final Metadata metadata;
-    private final ConnectorSession session;
+    private final Session session;
 
-    QueryPlanner(Analysis analysis, SymbolAllocator symbolAllocator, PlanNodeIdAllocator idAllocator, Metadata metadata, ConnectorSession session)
+    QueryPlanner(Analysis analysis, SymbolAllocator symbolAllocator, PlanNodeIdAllocator idAllocator, Metadata metadata, Session session)
     {
         Preconditions.checkNotNull(analysis, "analysis is null");
         Preconditions.checkNotNull(symbolAllocator, "symbolAllocator is null");
@@ -149,19 +149,19 @@ class QueryPlanner
         // This makes it possible to rewrite FieldOrExpressions that reference fields from the QuerySpecification directly
         translations.setFieldMappings(relationPlan.getOutputSymbols());
 
-        return new PlanBuilder(translations, relationPlan.getRoot());
+        return new PlanBuilder(translations, relationPlan.getRoot(), relationPlan.getSampleWeight());
     }
 
     private PlanBuilder planFrom(QuerySpecification node)
     {
         RelationPlan relationPlan;
 
-        if (node.getFrom() == null || node.getFrom().isEmpty()) {
-            relationPlan = planImplicitTable();
+        if (node.getFrom().isPresent()) {
+            relationPlan = new RelationPlanner(analysis, symbolAllocator, idAllocator, metadata, session)
+                    .process(node.getFrom().get(), null);
         }
         else {
-            relationPlan = new RelationPlanner(analysis, symbolAllocator, idAllocator, metadata, session)
-                    .process(Iterables.getOnlyElement(node.getFrom()), null);
+            relationPlan = planImplicitTable();
         }
 
         TranslationMap translations = new TranslationMap(relationPlan, analysis);
@@ -170,7 +170,7 @@ class QueryPlanner
         // This makes it possible to rewrite FieldOrExpressions that reference fields from the FROM clause directly
         translations.setFieldMappings(relationPlan.getOutputSymbols());
 
-        return new PlanBuilder(translations, relationPlan.getRoot());
+        return new PlanBuilder(translations, relationPlan.getRoot(), relationPlan.getSampleWeight());
     }
 
     private RelationPlan planImplicitTable()
@@ -179,7 +179,8 @@ class QueryPlanner
         return new RelationPlan(
                 new ValuesNode(idAllocator.getNextId(), ImmutableList.<Symbol>of(), ImmutableList.of(emptyRow)),
                 new TupleDescriptor(),
-                ImmutableList.<Symbol>of());
+                ImmutableList.<Symbol>of(),
+                Optional.<Symbol>absent());
     }
 
     private PlanBuilder filter(PlanBuilder subPlan, Expression predicate)
@@ -189,7 +190,7 @@ class QueryPlanner
         }
 
         Expression rewritten = subPlan.rewrite(predicate);
-        return new PlanBuilder(subPlan.getTranslations(), new FilterNode(idAllocator.getNextId(), subPlan.getRoot(), rewritten));
+        return new PlanBuilder(subPlan.getTranslations(), new FilterNode(idAllocator.getNextId(), subPlan.getRoot(), rewritten), subPlan.getSampleWeight());
     }
 
     private PlanBuilder project(PlanBuilder subPlan, Iterable<FieldOrExpression> expressions)
@@ -201,7 +202,7 @@ class QueryPlanner
             Symbol symbol;
 
             if (fieldOrExpression.isFieldReference()) {
-                Field field = subPlan.getRelationPlan().getDescriptor().getFields().get(fieldOrExpression.getFieldIndex());
+                Field field = subPlan.getRelationPlan().getDescriptor().getFieldByIndex(fieldOrExpression.getFieldIndex());
                 symbol = symbolAllocator.newSymbol(field);
             }
             else {
@@ -213,7 +214,12 @@ class QueryPlanner
             outputTranslations.put(fieldOrExpression, symbol);
         }
 
-        return new PlanBuilder(outputTranslations, new ProjectNode(idAllocator.getNextId(), subPlan.getRoot(), projections.build()));
+        if (subPlan.getSampleWeight().isPresent()) {
+            Symbol symbol = subPlan.getSampleWeight().get();
+            projections.put(symbol, new QualifiedNameReference(symbol.toQualifiedName()));
+        }
+
+        return new PlanBuilder(outputTranslations, new ProjectNode(idAllocator.getNextId(), subPlan.getRoot(), projections.build()), subPlan.getSampleWeight());
     }
 
     private Map<Symbol, Expression> coerce(Iterable<? extends Expression> expressions, PlanBuilder subPlan, TranslationMap translations)
@@ -225,7 +231,7 @@ class QueryPlanner
             Symbol symbol = symbolAllocator.newSymbol(expression, Objects.firstNonNull(coercion, analysis.getType(expression)));
             Expression rewritten = subPlan.rewrite(expression);
             if (coercion != null) {
-                rewritten = new Cast(rewritten, coercion.getName());
+                rewritten = new Cast(rewritten, coercion.getTypeSignature().toString());
             }
             projections.put(symbol, rewritten);
             translations.put(expression, symbol);
@@ -244,7 +250,7 @@ class QueryPlanner
         for (FieldOrExpression fieldOrExpression : alreadyCoerced) {
             Symbol symbol;
             if (fieldOrExpression.isFieldReference()) {
-                Field field = subPlan.getRelationPlan().getDescriptor().getFields().get(fieldOrExpression.getFieldIndex());
+                Field field = subPlan.getRelationPlan().getDescriptor().getFieldByIndex(fieldOrExpression.getFieldIndex());
                 symbol = symbolAllocator.newSymbol(field);
             }
             else {
@@ -255,7 +261,7 @@ class QueryPlanner
             translations.put(fieldOrExpression, symbol);
         }
 
-        return new PlanBuilder(translations, new ProjectNode(idAllocator.getNextId(), subPlan.getRoot(), projections.build()));
+        return new PlanBuilder(translations, new ProjectNode(idAllocator.getNextId(), subPlan.getRoot(), projections.build()), subPlan.getSampleWeight());
     }
 
     private PlanBuilder explicitCoercionSymbols(PlanBuilder subPlan, Iterable<Symbol> alreadyCoerced, Iterable<? extends Expression> uncoerced)
@@ -269,7 +275,7 @@ class QueryPlanner
             projections.put(symbol, new QualifiedNameReference(symbol.toQualifiedName()));
         }
 
-        return new PlanBuilder(translations, new ProjectNode(idAllocator.getNextId(), subPlan.getRoot(), projections.build()));
+        return new PlanBuilder(translations, new ProjectNode(idAllocator.getNextId(), subPlan.getRoot(), projections.build()), subPlan.getSampleWeight());
     }
 
     private PlanBuilder aggregate(PlanBuilder subPlan, QuerySpecification node)
@@ -309,7 +315,7 @@ class QueryPlanner
             aggregationAssignments.put(newSymbol, (FunctionCall) rewritten);
             translations.put(aggregate, newSymbol);
 
-            functions.put(newSymbol, analysis.getFunctionInfo(aggregate).getHandle());
+            functions.put(newSymbol, analysis.getFunctionInfo(aggregate).getSignature());
         }
 
         // 2.b. Rewrite group by expressions in terms of pre-projected inputs
@@ -351,9 +357,8 @@ class QueryPlanner
             MarkDistinctNode markDistinct = new MarkDistinctNode(idAllocator.getNextId(),
                     subPlan.getRoot(),
                     entry.getValue(),
-                    builder.build(),
-                    Optional.<Symbol>absent());
-            subPlan = new PlanBuilder(subPlan.getTranslations(), markDistinct);
+                    builder.build());
+            subPlan = new PlanBuilder(subPlan.getTranslations(), markDistinct, subPlan.getSampleWeight());
         }
 
         double confidence = 1.0;
@@ -361,7 +366,8 @@ class QueryPlanner
             confidence = Double.valueOf(analysis.getQuery().getApproximate().get().getConfidence()) / 100.0;
         }
 
-        subPlan = new PlanBuilder(translations, new AggregationNode(idAllocator.getNextId(), subPlan.getRoot(), ImmutableList.copyOf(groupBySymbols), aggregationAssignments.build(), functions.build(), new ImmutableMap.Builder<Symbol, Symbol>().putAll(masks).build(), Optional.<Symbol>absent(), confidence));
+        AggregationNode aggregationNode = new AggregationNode(idAllocator.getNextId(), subPlan.getRoot(), ImmutableList.copyOf(groupBySymbols), aggregationAssignments.build(), functions.build(), new ImmutableMap.Builder<Symbol, Symbol>().putAll(masks).build(), subPlan.getSampleWeight(), confidence);
+        subPlan = new PlanBuilder(translations, aggregationNode, Optional.<Symbol>absent());
 
         // 3. Post-projection
         // Add back the implicit casts that we removed in 2.a
@@ -422,13 +428,14 @@ class QueryPlanner
             assignments.put(newSymbol, (FunctionCall) rewritten);
             outputTranslations.put(windowFunction, newSymbol);
 
-            signatures.put(newSymbol, analysis.getFunctionInfo(windowFunction).getHandle());
+            signatures.put(newSymbol, analysis.getFunctionInfo(windowFunction).getSignature());
 
             List<Symbol> sourceSymbols = subPlan.getRoot().getOutputSymbols();
 
             // create window node
             subPlan = new PlanBuilder(outputTranslations,
-                    new WindowNode(idAllocator.getNextId(), subPlan.getRoot(), partitionBySymbols.build(), orderBySymbols.build(), orderings, assignments.build(), signatures));
+                    new WindowNode(idAllocator.getNextId(), subPlan.getRoot(), partitionBySymbols.build(), orderBySymbols.build(), orderings, assignments.build(), signatures),
+                    subPlan.getSampleWeight());
 
             if (needCoercion) {
                 subPlan = explicitCoercionSymbols(subPlan, sourceSymbols, ImmutableList.of(windowFunction));
@@ -465,7 +472,7 @@ class QueryPlanner
             translations.put(entry.getValue(), entry.getKey());
         }
 
-        return new PlanBuilder(translations, new ProjectNode(idAllocator.getNextId(), subPlan.getRoot(), projections.build()));
+        return new PlanBuilder(translations, new ProjectNode(idAllocator.getNextId(), subPlan.getRoot(), projections.build()), subPlan.getSampleWeight());
     }
 
     private PlanBuilder appendSemiJoins(PlanBuilder subPlan, Set<InPredicate> inPredicates)
@@ -510,7 +517,8 @@ class QueryPlanner
                         valueListRelation.getRoot(),
                         sourceJoinSymbol,
                         filteringSourceJoinSymbol,
-                        semiJoinOutputSymbol));
+                        semiJoinOutputSymbol),
+                subPlan.getSampleWeight());
     }
 
     private PlanBuilder distinct(PlanBuilder subPlan, QuerySpecification node, List<FieldOrExpression> outputs, List<FieldOrExpression> orderBy)
@@ -527,7 +535,7 @@ class QueryPlanner
                     Optional.<Symbol>absent(),
                     1.0);
 
-            return new PlanBuilder(subPlan.getTranslations(), aggregation);
+            return new PlanBuilder(subPlan.getTranslations(), aggregation, subPlan.getSampleWeight());
         }
 
         return subPlan;
@@ -562,13 +570,13 @@ class QueryPlanner
 
         PlanNode planNode;
         if (limit.isPresent()) {
-            planNode = new TopNNode(idAllocator.getNextId(), subPlan.getRoot(), Long.valueOf(limit.get()), orderBySymbols.build(), orderings.build(), false, Optional.<Symbol>absent());
+            planNode = new TopNNode(idAllocator.getNextId(), subPlan.getRoot(), Long.valueOf(limit.get()), orderBySymbols.build(), orderings.build(), false);
         }
         else {
             planNode = new SortNode(idAllocator.getNextId(), subPlan.getRoot(), orderBySymbols.build(), orderings.build());
         }
 
-        return new PlanBuilder(subPlan.getTranslations(), planNode);
+        return new PlanBuilder(subPlan.getTranslations(), planNode, subPlan.getSampleWeight());
     }
 
     private PlanBuilder limit(PlanBuilder subPlan, Query node)
@@ -585,7 +593,7 @@ class QueryPlanner
     {
         if (orderBy.isEmpty() && limit.isPresent()) {
             long limitValue = Long.valueOf(limit.get());
-            return new PlanBuilder(subPlan.getTranslations(), new LimitNode(idAllocator.getNextId(), subPlan.getRoot(), limitValue, Optional.<Symbol>absent()));
+            return new PlanBuilder(subPlan.getTranslations(), new LimitNode(idAllocator.getNextId(), subPlan.getRoot(), limitValue), subPlan.getSampleWeight());
         }
 
         return subPlan;

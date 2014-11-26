@@ -13,7 +13,7 @@
  */
 package com.facebook.presto.sql.planner.optimizations;
 
-import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.Session;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.sql.planner.PlanNodeIdAllocator;
 import com.facebook.presto.sql.planner.Symbol;
@@ -56,7 +56,7 @@ public class CanonicalizeExpressions
     }
 
     @Override
-    public PlanNode optimize(PlanNode plan, ConnectorSession session, Map<Symbol, Type> types, SymbolAllocator symbolAllocator, PlanNodeIdAllocator idAllocator)
+    public PlanNode optimize(PlanNode plan, Session session, Map<Symbol, Type> types, SymbolAllocator symbolAllocator, PlanNodeIdAllocator idAllocator)
     {
         checkNotNull(plan, "plan is null");
         checkNotNull(session, "session is null");
@@ -74,7 +74,7 @@ public class CanonicalizeExpressions
         public PlanNode rewriteProject(ProjectNode node, Void context, PlanRewriter<Void> planRewriter)
         {
             PlanNode source = planRewriter.rewrite(node.getSource(), context);
-            Map<Symbol, Expression> assignments = ImmutableMap.copyOf(Maps.transformValues(node.getOutputMap(), canonicalizeExpressionFunction()));
+            Map<Symbol, Expression> assignments = ImmutableMap.copyOf(Maps.transformValues(node.getAssignments(), canonicalizeExpressionFunction()));
             return new ProjectNode(node.getId(), source, assignments);
         }
 

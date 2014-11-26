@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.operator.window;
 
+import com.facebook.presto.operator.PagesIndex;
 import com.facebook.presto.spi.block.BlockBuilder;
 import com.facebook.presto.spi.type.Type;
 
@@ -30,7 +31,7 @@ public class RowNumberFunction
     }
 
     @Override
-    public void reset(int partitionRowCount)
+    public void reset(int partitionStartPosition, int partitionRowCount, PagesIndex pagesIndex)
     {
         rowNumber = 0;
     }
@@ -39,6 +40,6 @@ public class RowNumberFunction
     public void processRow(BlockBuilder output, boolean newPeerGroup, int peerGroupCount)
     {
         rowNumber++;
-        output.appendLong(rowNumber);
+        BIGINT.writeLong(output, rowNumber);
     }
 }

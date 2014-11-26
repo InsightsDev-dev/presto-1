@@ -15,13 +15,16 @@ package com.facebook.presto.metadata;
 
 import com.facebook.presto.spi.ColumnMetadata;
 import com.facebook.presto.spi.ConnectorColumnHandle;
+import com.facebook.presto.spi.ConnectorInsertTableHandle;
 import com.facebook.presto.spi.ConnectorMetadata;
 import com.facebook.presto.spi.ConnectorOutputTableHandle;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.ConnectorTableHandle;
 import com.facebook.presto.spi.ConnectorTableMetadata;
+import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.SchemaTablePrefix;
+import com.facebook.presto.spi.ViewNotFoundException;
 import com.facebook.presto.spi.type.Type;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -34,6 +37,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import static com.facebook.presto.spi.StandardErrorCode.ALREADY_EXISTS;
+import static com.facebook.presto.util.Types.checkType;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -41,6 +46,7 @@ public class TestingMetadata
         implements ConnectorMetadata
 {
     private final ConcurrentMap<SchemaTableName, ConnectorTableMetadata> tables = new ConcurrentHashMap<>();
+    private final ConcurrentMap<SchemaTableName, String> views = new ConcurrentHashMap<>();
 
     @Override
     public List<String> listSchemaNames(ConnectorSession session)
@@ -85,17 +91,6 @@ public class TestingMetadata
     }
 
     @Override
-    public ConnectorColumnHandle getColumnHandle(ConnectorTableHandle tableHandle, String columnName)
-    {
-        for (ColumnMetadata columnMetadata : getTableMetadata(tableHandle).getColumns()) {
-            if (columnMetadata.getName().equals(columnName)) {
-                return new InMemoryColumnHandle(columnMetadata.getName(), columnMetadata.getOrdinalPosition(), columnMetadata.getType());
-            }
-        }
-        return null;
-    }
-
-    @Override
     public ConnectorColumnHandle getSampleWeightColumnHandle(ConnectorTableHandle tableHandle)
     {
         return null;
@@ -129,9 +124,7 @@ public class TestingMetadata
     public ColumnMetadata getColumnMetadata(ConnectorTableHandle tableHandle, ConnectorColumnHandle columnHandle)
     {
         SchemaTableName tableName = getTableName(tableHandle);
-        checkArgument(columnHandle instanceof InMemoryColumnHandle, "columnHandle is not an instance of InMemoryColumnHandle");
-        InMemoryColumnHandle inMemoryColumnHandle = (InMemoryColumnHandle) columnHandle;
-        int columnIndex = inMemoryColumnHandle.getOrdinalPosition();
+        int columnIndex = checkType(columnHandle, InMemoryColumnHandle.class, "columnHandle").getOrdinalPosition();
         return tables.get(tableName).getColumns().get(columnIndex);
     }
 
@@ -145,6 +138,17 @@ public class TestingMetadata
             }
         }
         return builder.build();
+    }
+
+    @Override
+    public void renameTable(ConnectorTableHandle tableHandle, SchemaTableName newTableName)
+    {
+        // TODO: use locking to do this properly
+        ConnectorTableMetadata table = getTableMetadata(tableHandle);
+        if (tables.putIfAbsent(newTableName, table) != null) {
+            throw new IllegalArgumentException("Target table already exists: " + newTableName);
+        }
+        tables.remove(table.getTable(), table);
     }
 
     @Override
@@ -171,6 +175,61 @@ public class TestingMetadata
     public void commitCreateTable(ConnectorOutputTableHandle tableHandle, Collection<String> fragments)
     {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public ConnectorInsertTableHandle beginInsert(ConnectorSession session, ConnectorTableHandle tableHandle)
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void commitInsert(ConnectorInsertTableHandle insertHandle, Collection<String> fragments)
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void createView(ConnectorSession session, SchemaTableName viewName, String viewData, boolean replace)
+    {
+        if (replace) {
+            views.put(viewName, viewData);
+        }
+        else if (views.putIfAbsent(viewName, viewData) != null) {
+            throw new PrestoException(ALREADY_EXISTS, "View already exists: " + viewName);
+        }
+    }
+
+    @Override
+    public void dropView(ConnectorSession session, SchemaTableName viewName)
+    {
+        if (views.remove(viewName) == null) {
+            throw new ViewNotFoundException(viewName);
+        }
+    }
+
+    @Override
+    public List<SchemaTableName> listViews(ConnectorSession session, String schemaNameOrNull)
+    {
+        ImmutableList.Builder<SchemaTableName> builder = ImmutableList.builder();
+        for (SchemaTableName viewName : views.keySet()) {
+            if ((schemaNameOrNull == null) || schemaNameOrNull.equals(viewName.getSchemaName())) {
+                builder.add(viewName);
+            }
+        }
+        return builder.build();
+    }
+
+    @Override
+    public Map<SchemaTableName, String> getViews(ConnectorSession session, SchemaTablePrefix prefix)
+    {
+        ImmutableMap.Builder<SchemaTableName, String> map = ImmutableMap.builder();
+        for (Map.Entry<SchemaTableName, String> entry : views.entrySet()) {
+            if (prefix.matches(entry.getKey())) {
+                map.put(entry);
+            }
+        }
+        return map.build();
     }
 
     private static SchemaTableName getTableName(ConnectorTableHandle tableHandle)

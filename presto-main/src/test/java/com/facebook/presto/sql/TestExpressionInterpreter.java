@@ -13,11 +13,13 @@
  */
 package com.facebook.presto.sql;
 
+import com.facebook.presto.metadata.Metadata;
+import com.facebook.presto.metadata.MetadataManager;
 import com.facebook.presto.operator.scalar.FunctionAssertions;
-import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.RecordCursor;
 import com.facebook.presto.spi.type.Type;
+import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.ExpressionInterpreter;
 import com.facebook.presto.sql.planner.Symbol;
 import com.facebook.presto.sql.planner.SymbolResolver;
@@ -37,31 +39,28 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 
 import java.util.IdentityHashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static com.facebook.presto.connector.dual.DualMetadata.DUAL_METADATA_MANAGER;
+import static com.facebook.presto.SessionTestUtils.TEST_SESSION;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.BooleanType.BOOLEAN;
 import static com.facebook.presto.spi.type.DateType.DATE;
 import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
 import static com.facebook.presto.spi.type.IntervalDayTimeType.INTERVAL_DAY_TIME;
 import static com.facebook.presto.spi.type.TimeType.TIME;
-import static com.facebook.presto.spi.type.TimeZoneKey.UTC_KEY;
 import static com.facebook.presto.spi.type.TimestampType.TIMESTAMP;
 import static com.facebook.presto.spi.type.VarcharType.VARCHAR;
 import static com.facebook.presto.sql.ExpressionFormatter.formatExpression;
 import static com.facebook.presto.sql.analyzer.ExpressionAnalyzer.getExpressionTypes;
-import static com.facebook.presto.sql.parser.SqlParser.createExpression;
 import static com.facebook.presto.sql.planner.ExpressionInterpreter.expressionInterpreter;
 import static com.facebook.presto.sql.planner.ExpressionInterpreter.expressionOptimizer;
 import static com.google.common.base.Charsets.UTF_8;
+import static java.util.Locale.ENGLISH;
 import static org.testng.Assert.assertEquals;
 
 public class TestExpressionInterpreter
 {
-    private static final ConnectorSession SESSION = new ConnectorSession("user", "test", "catalog", "schema", UTC_KEY, Locale.ENGLISH, null, null);
     private static final Map<Symbol, Type> SYMBOL_TYPES = ImmutableMap.<Symbol, Type>builder()
             .put(new Symbol("bound_long"), BIGINT)
             .put(new Symbol("bound_string"), VARCHAR)
@@ -85,6 +84,9 @@ public class TestExpressionInterpreter
             .put(new Symbol("unbound_pattern"), VARCHAR)
             .put(new Symbol("unbound_null_string"), VARCHAR)
             .build();
+
+    private static final SqlParser SQL_PARSER = new SqlParser();
+    private static final Metadata METADATA = new MetadataManager();
 
     @Test
     public void testAnd()
@@ -370,7 +372,7 @@ public class TestExpressionInterpreter
     public void testCurrentTimestamp()
             throws Exception
     {
-        double current = SESSION.getStartTime() / 1000.0;
+        double current = TEST_SESSION.getStartTime() / 1000.0;
         assertOptimizedEquals("current_timestamp = from_unixtime(" + current + ")", "true");
         double future = current + TimeUnit.MINUTES.toSeconds(1);
         assertOptimizedEquals("current_timestamp > from_unixtime(" + future + ")", "false");
@@ -497,6 +499,16 @@ public class TestExpressionInterpreter
         assertOptimizedEquals("cast(bound_long as VARCHAR)", "'1234'");
         assertOptimizedEquals("cast(bound_long + 1 as VARCHAR)", "'1235'");
         assertOptimizedEquals("cast(unbound_string as VARCHAR)", "cast(unbound_string as VARCHAR)");
+    }
+
+    @Test
+    public void testTryCast()
+    {
+        assertOptimizedEquals("try_cast(null as BIGINT)", "null");
+        assertOptimizedEquals("try_cast(123 as BIGINT)", "123");
+        assertOptimizedEquals("try_cast('foo' as VARCHAR)", "'foo'");
+        assertOptimizedEquals("try_cast('foo' as BIGINT)", "null");
+        assertOptimizedEquals("try_cast(unbound_string as BIGINT)", "try_cast(unbound_string as BIGINT)");
     }
 
     @Test
@@ -769,7 +781,7 @@ public class TestExpressionInterpreter
         optimize("case when 0 / 0 = 0 then 1 end");
     }
 
-    @Test(timeOut = 1000)
+    @Test(timeOut = 60000)
     public void testLikeInvalidUtf8()
     {
         assertLike(new byte[] {'a', 'b', 'c'}, "%b%", true);
@@ -817,23 +829,23 @@ public class TestExpressionInterpreter
 
     private static void assertOptimizedEqualsSelf(@Language("SQL") String expression)
     {
-        assertEquals(optimize(expression), createExpression(expression));
+        assertEquals(optimize(expression), SQL_PARSER.createExpression(expression));
     }
 
     private static Object optimize(@Language("SQL") String expression)
     {
         assertRoundTrip(expression);
 
-        Expression parsedExpression = FunctionAssertions.createExpression(expression, DUAL_METADATA_MANAGER, SYMBOL_TYPES);
+        Expression parsedExpression = FunctionAssertions.createExpression(expression, METADATA, SYMBOL_TYPES);
 
-        IdentityHashMap<Expression, Type> expressionTypes = getExpressionTypes(SESSION, DUAL_METADATA_MANAGER, SYMBOL_TYPES, parsedExpression);
-        ExpressionInterpreter interpreter = expressionOptimizer(parsedExpression, DUAL_METADATA_MANAGER, SESSION, expressionTypes);
+        IdentityHashMap<Expression, Type> expressionTypes = getExpressionTypes(TEST_SESSION, METADATA, SQL_PARSER, SYMBOL_TYPES, parsedExpression);
+        ExpressionInterpreter interpreter = expressionOptimizer(parsedExpression, METADATA, TEST_SESSION, expressionTypes);
         return interpreter.optimize(new SymbolResolver()
         {
             @Override
             public Object getValue(Symbol symbol)
             {
-                switch (symbol.getName().toLowerCase()) {
+                switch (symbol.getName().toLowerCase(ENGLISH)) {
                     case "bound_long":
                         return 1234L;
                     case "bound_string":
@@ -859,20 +871,21 @@ public class TestExpressionInterpreter
     {
         assertRoundTrip(expression);
 
-        Expression parsedExpression = FunctionAssertions.createExpression(expression, DUAL_METADATA_MANAGER, SYMBOL_TYPES);
+        Expression parsedExpression = FunctionAssertions.createExpression(expression, METADATA, SYMBOL_TYPES);
 
         return evaluate(parsedExpression);
     }
 
     private static void assertRoundTrip(String expression)
     {
-        assertEquals(createExpression(expression), createExpression(formatExpression(createExpression(expression))));
+        assertEquals(SQL_PARSER.createExpression(expression),
+                SQL_PARSER.createExpression(formatExpression(SQL_PARSER.createExpression(expression))));
     }
 
     private static Object evaluate(Expression expression)
     {
-        IdentityHashMap<Expression, Type> expressionTypes = getExpressionTypes(SESSION, DUAL_METADATA_MANAGER, SYMBOL_TYPES, expression);
-        ExpressionInterpreter interpreter = expressionInterpreter(expression, DUAL_METADATA_MANAGER, SESSION, expressionTypes);
+        IdentityHashMap<Expression, Type> expressionTypes = getExpressionTypes(TEST_SESSION, METADATA, SQL_PARSER, SYMBOL_TYPES, expression);
+        ExpressionInterpreter interpreter = expressionInterpreter(expression, METADATA, TEST_SESSION, expressionTypes);
 
         return interpreter.evaluate((RecordCursor) null);
     }

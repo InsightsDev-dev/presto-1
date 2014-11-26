@@ -14,27 +14,28 @@
 package com.facebook.presto.testing;
 
 import com.facebook.presto.ScheduledSplit;
+import com.facebook.presto.Session;
 import com.facebook.presto.TaskSource;
 import com.facebook.presto.connector.ConnectorManager;
-import com.facebook.presto.connector.dual.DualConnector;
 import com.facebook.presto.connector.system.CatalogSystemTable;
 import com.facebook.presto.connector.system.NodesSystemTable;
-import com.facebook.presto.connector.system.SystemConnector;
-import com.facebook.presto.connector.system.SystemDataStreamProvider;
+import com.facebook.presto.connector.system.SystemRecordSetProvider;
 import com.facebook.presto.connector.system.SystemSplitManager;
 import com.facebook.presto.connector.system.SystemTablesManager;
 import com.facebook.presto.connector.system.SystemTablesMetadata;
-import com.facebook.presto.execution.SplitSource;
+import com.facebook.presto.split.SplitSource;
 import com.facebook.presto.execution.TaskId;
+import com.facebook.presto.execution.TaskManagerConfig;
 import com.facebook.presto.index.IndexManager;
 import com.facebook.presto.metadata.ColumnHandle;
 import com.facebook.presto.metadata.HandleResolver;
 import com.facebook.presto.metadata.InMemoryNodeManager;
+import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.metadata.MetadataManager;
-import com.facebook.presto.metadata.OutputTableHandleResolver;
 import com.facebook.presto.metadata.Partition;
 import com.facebook.presto.metadata.PartitionResult;
 import com.facebook.presto.metadata.QualifiedTableName;
+import com.facebook.presto.metadata.QualifiedTablePrefix;
 import com.facebook.presto.metadata.Split;
 import com.facebook.presto.metadata.TableHandle;
 import com.facebook.presto.operator.Driver;
@@ -44,16 +45,18 @@ import com.facebook.presto.operator.Operator;
 import com.facebook.presto.operator.OperatorContext;
 import com.facebook.presto.operator.OperatorFactory;
 import com.facebook.presto.operator.OutputFactory;
+import com.facebook.presto.operator.PageSourceOperator;
 import com.facebook.presto.operator.RecordSinkManager;
 import com.facebook.presto.operator.TaskContext;
+import com.facebook.presto.operator.index.IndexJoinLookupStats;
 import com.facebook.presto.spi.ColumnMetadata;
-import com.facebook.presto.spi.Connector;
 import com.facebook.presto.spi.ConnectorFactory;
-import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.spi.ConnectorPageSource;
+import com.facebook.presto.spi.Plugin;
 import com.facebook.presto.spi.SystemTable;
 import com.facebook.presto.spi.TupleDomain;
 import com.facebook.presto.spi.type.Type;
-import com.facebook.presto.split.DataStreamManager;
+import com.facebook.presto.split.PageSourceManager;
 import com.facebook.presto.split.SplitManager;
 import com.facebook.presto.sql.analyzer.Analysis;
 import com.facebook.presto.sql.analyzer.Analyzer;
@@ -61,6 +64,7 @@ import com.facebook.presto.sql.analyzer.FeaturesConfig;
 import com.facebook.presto.sql.analyzer.QueryExplainer;
 import com.facebook.presto.sql.gen.ExpressionCompiler;
 import com.facebook.presto.sql.parser.SqlParser;
+import com.facebook.presto.sql.planner.CompilerConfig;
 import com.facebook.presto.sql.planner.DistributedLogicalPlanner;
 import com.facebook.presto.sql.planner.LocalExecutionPlanner;
 import com.facebook.presto.sql.planner.LocalExecutionPlanner.LocalExecutionPlan;
@@ -82,8 +86,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
-import io.airlift.node.NodeConfig;
-import io.airlift.node.NodeInfo;
 import org.intellij.lang.annotations.Language;
 
 import java.util.ArrayList;
@@ -93,21 +95,25 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.facebook.presto.sql.testing.TreeAssertions.assertFormattedSql;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.airlift.concurrent.Threads.daemonThreadsNamed;
+import static java.util.concurrent.Executors.newCachedThreadPool;
 
 public class LocalQueryRunner
+    implements QueryRunner
 {
-    private final ConnectorSession session;
+    private final Session defaultSession;
     private final ExecutorService executor;
 
-    private final NodeInfo nodeInfo;
+    private final SqlParser sqlParser;
     private final InMemoryNodeManager nodeManager;
     private final TypeRegistry typeRegistry;
     private final MetadataManager metadata;
     private final SplitManager splitManager;
-    private final DataStreamManager dataStreamProvider;
+    private final PageSourceManager pageSourceManager;
     private final IndexManager indexManager;
     private final RecordSinkManager recordSinkManager;
 
@@ -116,27 +122,27 @@ public class LocalQueryRunner
 
     private boolean printPlan;
 
-    public LocalQueryRunner(ConnectorSession session, ExecutorService executor)
+    public LocalQueryRunner(Session defaultSession)
     {
-        this.session = checkNotNull(session, "session is null");
-        this.executor = checkNotNull(executor, "executor is null");
+        this.defaultSession = checkNotNull(defaultSession, "defaultSession is null");
+        this.executor = newCachedThreadPool(daemonThreadsNamed("local-query-runner-%s"));
 
-        this.nodeInfo = new NodeInfo(new NodeConfig().setEnvironment("test").setNodeId("local"));
+        this.sqlParser = new SqlParser();
         this.nodeManager = new InMemoryNodeManager();
         this.typeRegistry = new TypeRegistry();
-        this.metadata = new MetadataManager(new FeaturesConfig().setExperimentalSyntaxEnabled(true), typeRegistry);
-        this.splitManager = new SplitManager();
-        this.dataStreamProvider = new DataStreamManager();
         this.indexManager = new IndexManager();
         this.recordSinkManager = new RecordSinkManager();
-
-        this.compiler = new ExpressionCompiler(metadata);
 
         // sys schema
         SystemTablesMetadata systemTablesMetadata = new SystemTablesMetadata();
         SystemSplitManager systemSplitManager = new SystemSplitManager(nodeManager);
-        SystemDataStreamProvider systemDataStreamProvider = new SystemDataStreamProvider();
-        SystemTablesManager systemTablesManager = new SystemTablesManager(systemTablesMetadata, systemSplitManager, systemDataStreamProvider, ImmutableSet.<SystemTable>of());
+        SystemRecordSetProvider systemRecordSetProvider = new SystemRecordSetProvider();
+
+        this.metadata = new MetadataManager(new FeaturesConfig().setExperimentalSyntaxEnabled(true), typeRegistry, systemTablesMetadata);
+        this.splitManager = new SplitManager(systemSplitManager);
+        this.pageSourceManager = new PageSourceManager(systemRecordSetProvider);
+
+        SystemTablesManager systemTablesManager = new SystemTablesManager(systemTablesMetadata, systemSplitManager, systemRecordSetProvider, ImmutableSet.<SystemTable>of());
 
         // sys.node
         systemTablesManager.addTable(new NodesSystemTable(nodeManager));
@@ -144,19 +150,30 @@ public class LocalQueryRunner
         // sys.catalog
         systemTablesManager.addTable(new CatalogSystemTable(metadata));
 
+        this.compiler = new ExpressionCompiler(metadata);
+
         this.connectorManager = new ConnectorManager(
                 metadata,
                 splitManager,
-                dataStreamProvider,
+                pageSourceManager,
                 indexManager,
                 recordSinkManager,
                 new HandleResolver(),
-                new OutputTableHandleResolver(),
                 ImmutableMap.<String, ConnectorFactory>of(),
-                ImmutableMap.<String, Connector>of(
-                        DualConnector.CONNECTOR_ID, new DualConnector(nodeManager),
-                        SystemConnector.CONNECTOR_ID, new SystemConnector(systemTablesMetadata, systemSplitManager, systemDataStreamProvider)),
-                nodeManager);
+                nodeManager
+        );
+    }
+
+    @Override
+    public void close()
+    {
+        executor.shutdownNow();
+    }
+
+    @Override
+    public int getNodeCount()
+    {
+        return 1;
     }
 
     public InMemoryNodeManager getNodeManager()
@@ -169,7 +186,7 @@ public class LocalQueryRunner
         return typeRegistry;
     }
 
-    public MetadataManager getMetadata()
+    public Metadata getMetadata()
     {
         return metadata;
     }
@@ -179,10 +196,28 @@ public class LocalQueryRunner
         return executor;
     }
 
+    @Override
+    public Session getDefaultSession()
+    {
+        return defaultSession;
+    }
+
     public void createCatalog(String catalogName, ConnectorFactory connectorFactory, Map<String, String> properties)
     {
         nodeManager.addCurrentNodeDatasource(catalogName);
         connectorManager.createConnection(catalogName, connectorFactory, properties);
+    }
+
+    @Override
+    public void installPlugin(Plugin plugin)
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void createCatalog(String catalogName, String connectorName, Map<String, String> properties)
+    {
+        throw new UnsupportedOperationException();
     }
 
     public LocalQueryRunner printPlan()
@@ -236,10 +271,33 @@ public class LocalQueryRunner
         }
     }
 
+    @Override
+    public List<QualifiedTableName> listTables(Session session, String catalog, String schema)
+    {
+        return getMetadata().listTables(session, new QualifiedTablePrefix(catalog, schema));
+    }
+
+    @Override
+    public boolean tableExists(Session session, String table)
+    {
+        QualifiedTableName name =  new QualifiedTableName(session.getCatalog(), session.getSchema(), table);
+        Optional<TableHandle> handle = getMetadata().getTableHandle(session, name);
+        return handle.isPresent();
+    }
+
+    @Override
     public MaterializedResult execute(@Language("SQL") String sql)
     {
+        return execute(defaultSession, sql);
+    }
+
+    @Override
+    public MaterializedResult execute(Session session, @Language("SQL") String sql)
+    {
         MaterializedOutputFactory outputFactory = new MaterializedOutputFactory();
-        List<Driver> drivers = createDrivers(sql, outputFactory);
+
+        TaskContext taskContext = new TaskContext(new TaskId("query", "stage", "task"), executor, session);
+        List<Driver> drivers = createDrivers(session, sql, outputFactory, taskContext);
 
         boolean done = false;
         while (!done) {
@@ -256,21 +314,25 @@ public class LocalQueryRunner
         return outputFactory.getMaterializingOperator().getMaterializedResult();
     }
 
-    public List<Driver> createDrivers(@Language("SQL") String sql, OutputFactory outputFactory)
-    {
-        return createDrivers(sql, outputFactory, new TaskContext(new TaskId("query", "stage", "task"), executor, session));
-    }
-
     public List<Driver> createDrivers(@Language("SQL") String sql, OutputFactory outputFactory, TaskContext taskContext)
     {
-        Statement statement = SqlParser.createStatement(sql);
+        return createDrivers(defaultSession, sql, outputFactory, taskContext);
+    }
+
+    public List<Driver> createDrivers(Session session, @Language("SQL") String sql, OutputFactory outputFactory, TaskContext taskContext)
+    {
+        Statement statement = sqlParser.createStatement(sql);
+
+        assertFormattedSql(sqlParser, statement);
 
         PlanNodeIdAllocator idAllocator = new PlanNodeIdAllocator();
-        FeaturesConfig featuresConfig = new FeaturesConfig().setExperimentalSyntaxEnabled(true);
-        PlanOptimizersFactory planOptimizersFactory = new PlanOptimizersFactory(metadata, splitManager, indexManager, featuresConfig);
+        FeaturesConfig featuresConfig = new FeaturesConfig()
+                .setExperimentalSyntaxEnabled(true)
+                .setDistributedIndexJoinsEnabled(false);
+        PlanOptimizersFactory planOptimizersFactory = new PlanOptimizersFactory(metadata, sqlParser, splitManager, indexManager, featuresConfig);
 
-        QueryExplainer queryExplainer = new QueryExplainer(session, planOptimizersFactory.get(), metadata, featuresConfig.isExperimentalSyntaxEnabled());
-        Analyzer analyzer = new Analyzer(session, metadata, Optional.of(queryExplainer), featuresConfig.isExperimentalSyntaxEnabled());
+        QueryExplainer queryExplainer = new QueryExplainer(session, planOptimizersFactory.get(), metadata, sqlParser, featuresConfig.isExperimentalSyntaxEnabled(), featuresConfig.isDistributedIndexJoinsEnabled(), featuresConfig.isDistributedJoinsEnabled());
+        Analyzer analyzer = new Analyzer(session, metadata, sqlParser, Optional.of(queryExplainer), featuresConfig.isExperimentalSyntaxEnabled());
 
         Analysis analysis = analyzer.analyze(statement);
 
@@ -279,21 +341,23 @@ public class LocalQueryRunner
             System.out.println(PlanPrinter.textLogicalPlan(plan.getRoot(), plan.getTypes(), metadata));
         }
 
-        SubPlan subplan = new DistributedLogicalPlanner(session, metadata, idAllocator).createSubPlans(plan, true);
+        SubPlan subplan = new DistributedLogicalPlanner(session, metadata, idAllocator).createSubPlans(plan, true, featuresConfig.isDistributedIndexJoinsEnabled(), featuresConfig.isDistributedJoinsEnabled());
         if (!subplan.getChildren().isEmpty()) {
             throw new AssertionError("Expected subplan to have no children");
         }
 
         LocalExecutionPlanner executionPlanner = new LocalExecutionPlanner(
-                new NodeInfo(new NodeConfig()
-                        .setEnvironment("test")
-                        .setNodeId("test-node")),
                 metadata,
-                dataStreamProvider,
+                sqlParser,
+                pageSourceManager,
                 indexManager,
                 recordSinkManager,
                 null,
-                compiler);
+                compiler,
+                new IndexJoinLookupStats(),
+                new CompilerConfig().setInterpreterEnabled(false), // make sure tests fail if compiler breaks
+                new TaskManagerConfig()
+        );
 
         // plan query
         LocalExecutionPlan localExecutionPlan = executionPlanner.plan(session,
@@ -363,17 +427,27 @@ public class LocalQueryRunner
         return matchingPartitions.getPartitions();
     }
 
-    public OperatorFactory createTableScanOperator(final int operatorId, String tableName, String... columnNames)
+    public OperatorFactory createTableScanOperator(int operatorId, String tableName, String... columnNames)
+    {
+        return createTableScanOperator(defaultSession, operatorId, tableName, columnNames);
+    }
+
+    public OperatorFactory createTableScanOperator(
+            Session session,
+            final int operatorId,
+            String tableName,
+            String... columnNames)
     {
         // look up the table
         TableHandle tableHandle = metadata.getTableHandle(session, new QualifiedTableName(session.getCatalog(), session.getSchema(), tableName)).orNull();
         checkArgument(tableHandle != null, "Table %s does not exist", tableName);
 
         // lookup the columns
+        Map<String, ColumnHandle> allColumnHandles = metadata.getColumnHandles(tableHandle);
         ImmutableList.Builder<ColumnHandle> columnHandlesBuilder = ImmutableList.builder();
         ImmutableList.Builder<Type> columnTypesBuilder = ImmutableList.builder();
         for (String columnName : columnNames) {
-            ColumnHandle columnHandle = metadata.getColumnHandle(tableHandle, columnName).orNull();
+            ColumnHandle columnHandle = allColumnHandles.get(columnName);
             checkArgument(columnHandle != null, "Table %s does not have a column %s", tableName, columnName);
             columnHandlesBuilder.add(columnHandle);
             ColumnMetadata columnMetadata = metadata.getColumnMetadata(tableHandle, columnHandle);
@@ -397,7 +471,8 @@ public class LocalQueryRunner
             public Operator createOperator(DriverContext driverContext)
             {
                 OperatorContext operatorContext = driverContext.addOperatorContext(operatorId, "BenchmarkSource");
-                return dataStreamProvider.createNewDataStream(operatorContext, split, columnHandles);
+                ConnectorPageSource pageSource = pageSourceManager.createPageSource(split, columnHandles);
+                return new PageSourceOperator(pageSource, columnTypes, operatorContext);
             }
 
             @Override
@@ -413,7 +488,9 @@ public class LocalQueryRunner
             List<Partition> partitions = splitManager.getPartitions(tableHandle, Optional.<TupleDomain<ColumnHandle>>absent()).getPartitions();
             SplitSource splitSource = splitManager.getPartitionSplits(tableHandle, partitions);
             Split split = Iterables.getOnlyElement(splitSource.getNextBatch(1000));
-            checkState(splitSource.isFinished(), "Expected only one split for a local query");
+            while (!splitSource.isFinished()) {
+                checkState(splitSource.getNextBatch(1000).isEmpty(), "Expected only one split for a local query");
+            }
             return split;
         }
         catch (InterruptedException e) {

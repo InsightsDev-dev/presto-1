@@ -16,8 +16,11 @@ package com.facebook.presto.hive;
 import com.facebook.presto.hive.util.SerDeUtils;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.type.Type;
+import com.facebook.presto.spi.type.TypeManager;
 import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableSet;
+import io.airlift.slice.ByteArrays;
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
 import org.apache.hadoop.hive.serde2.columnar.BytesRefArrayWritable;
@@ -31,24 +34,35 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.mapred.RecordReader;
 import org.joda.time.DateTimeZone;
-import sun.misc.Unsafe;
+import org.joda.time.format.ISODateTimeFormat;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static com.facebook.presto.hive.HiveBooleanParser.isFalse;
 import static com.facebook.presto.hive.HiveBooleanParser.isTrue;
 import static com.facebook.presto.hive.HiveErrorCode.HIVE_CURSOR_ERROR;
+import static com.facebook.presto.hive.HiveType.HIVE_BYTE;
+import static com.facebook.presto.hive.HiveType.HIVE_DATE;
+import static com.facebook.presto.hive.HiveType.HIVE_DOUBLE;
+import static com.facebook.presto.hive.HiveType.HIVE_FLOAT;
+import static com.facebook.presto.hive.HiveType.HIVE_INT;
+import static com.facebook.presto.hive.HiveType.HIVE_LONG;
+import static com.facebook.presto.hive.HiveType.HIVE_SHORT;
+import static com.facebook.presto.hive.HiveType.HIVE_TIMESTAMP;
 import static com.facebook.presto.hive.HiveUtil.getTableObjectInspector;
+import static com.facebook.presto.hive.HiveUtil.isStructuralType;
+import static com.facebook.presto.hive.HiveUtil.parseHiveTimestamp;
 import static com.facebook.presto.hive.NumberParser.parseDouble;
 import static com.facebook.presto.hive.NumberParser.parseLong;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.BooleanType.BOOLEAN;
+import static com.facebook.presto.spi.type.DateType.DATE;
 import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
 import static com.facebook.presto.spi.type.TimestampType.TIMESTAMP;
 import static com.facebook.presto.spi.type.VarbinaryType.VARBINARY;
@@ -57,13 +71,15 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.collect.Maps.uniqueIndex;
-import static com.google.common.collect.Sets.immutableEnumSet;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
+import static org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
 
 class ColumnarBinaryHiveRecordCursor<K>
         extends HiveRecordCursor
 {
+    private static final long MILLIS_IN_DAY = TimeUnit.DAYS.toMillis(1);
+
     private final RecordReader<K, BytesRefArrayWritable> recordReader;
     private final DateTimeZone sessionTimeZone;
     private final K key;
@@ -91,49 +107,29 @@ class ColumnarBinaryHiveRecordCursor<K>
     private long completedBytes;
     private boolean closed;
 
-    private static final Unsafe unsafe;
-
     private static final byte HIVE_EMPTY_STRING_BYTE = (byte) 0xbf;
 
     private static final int SIZE_OF_SHORT = 2;
     private static final int SIZE_OF_INT = 4;
     private static final int SIZE_OF_LONG = 8;
 
-    private static final Set<HiveType> VALID_HIVE_STRING_TYPES = immutableEnumSet(HiveType.BINARY, HiveType.STRING, HiveType.MAP, HiveType.LIST, HiveType.STRUCT);
-
-    static {
-        try {
-            // fetch theUnsafe object
-            Field field = Unsafe.class.getDeclaredField("theUnsafe");
-            field.setAccessible(true);
-            unsafe = (Unsafe) field.get(null);
-            if (unsafe == null) {
-                throw new RuntimeException("Unsafe access not available");
-            }
-
-            // make sure the VM thinks bytes are only one byte wide
-            if (Unsafe.ARRAY_BYTE_INDEX_SCALE != 1) {
-                throw new IllegalStateException("Byte array index scale must be 1, but is " + Unsafe.ARRAY_BYTE_INDEX_SCALE);
-            }
-        }
-        catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
+    private static final Set<HiveType> VALID_HIVE_STRING_TYPES = ImmutableSet.of(HiveType.HIVE_BINARY, HiveType.HIVE_STRING);
+    private static final Set<Category> VALID_HIVE_STRING_CATEGORIES = ImmutableSet.of(Category.LIST, Category.MAP, Category.STRUCT);
 
     public ColumnarBinaryHiveRecordCursor(RecordReader<K, BytesRefArrayWritable> recordReader,
             long totalBytes,
             Properties splitSchema,
             List<HivePartitionKey> partitionKeys,
             List<HiveColumnHandle> columns,
-            DateTimeZone sessionTimeZone)
+            DateTimeZone hiveStorageTimeZone,
+            DateTimeZone sessionTimeZone,
+            TypeManager typeManager)
     {
         checkNotNull(recordReader, "recordReader is null");
         checkArgument(totalBytes >= 0, "totalBytes is negative");
         checkNotNull(splitSchema, "splitSchema is null");
         checkNotNull(partitionKeys, "partitionKeys is null");
         checkNotNull(columns, "columns is null");
-        checkArgument(!columns.isEmpty(), "columns is empty");
         checkNotNull(sessionTimeZone, "sessionTimeZone is null");
 
         this.recordReader = recordReader;
@@ -168,7 +164,7 @@ class ColumnarBinaryHiveRecordCursor<K>
             HiveColumnHandle column = columns.get(i);
 
             names[i] = column.getName();
-            types[i] = column.getType();
+            types[i] = typeManager.getType(column.getTypeSignature());
             hiveTypes[i] = column.getHiveType();
 
             if (!column.isPartitionKey()) {
@@ -190,7 +186,10 @@ class ColumnarBinaryHiveRecordCursor<K>
                 byte[] bytes = partitionKey.getValue().getBytes(Charsets.UTF_8);
 
                 Type type = types[columnIndex];
-                if (BOOLEAN.equals(type)) {
+                if (HiveUtil.isHiveNull(bytes)) {
+                    nulls[columnIndex] = true;
+                }
+                else if (BOOLEAN.equals(type)) {
                     if (isTrue(bytes, 0, bytes.length)) {
                         booleans[columnIndex] = true;
                     }
@@ -216,6 +215,12 @@ class ColumnarBinaryHiveRecordCursor<K>
                 }
                 else if (VARCHAR.equals(type)) {
                     slices[columnIndex] = Slices.wrappedBuffer(bytes);
+                }
+                else if (DATE.equals(type)) {
+                    longs[columnIndex] = ISODateTimeFormat.date().withZoneUTC().parseMillis(partitionKey.getValue());
+                }
+                else if (TIMESTAMP.equals(type)) {
+                    longs[columnIndex] = parseHiveTimestamp(partitionKey.getValue(), hiveStorageTimeZone);
                 }
                 else {
                     throw new UnsupportedOperationException("Unsupported column type: " + type);
@@ -268,15 +273,11 @@ class ColumnarBinaryHiveRecordCursor<K>
             // partition keys are already loaded, but everything else is not
             System.arraycopy(isPartitionColumn, 0, loaded, 0, isPartitionColumn.length);
 
-            // reset null flags
-            // todo this shouldn't be needed
-            Arrays.fill(nulls, false);
-
             return true;
         }
         catch (IOException | RuntimeException e) {
             closeWithSuppression(e);
-            throw new PrestoException(HIVE_CURSOR_ERROR.toErrorCode(), e);
+            throw new PrestoException(HIVE_CURSOR_ERROR, e);
         }
     }
 
@@ -338,9 +339,9 @@ class ColumnarBinaryHiveRecordCursor<K>
     {
         checkState(!closed, "Cursor is closed");
 
-        if (!types[fieldId].equals(BIGINT) && !types[fieldId].equals(TIMESTAMP)) {
+        if (!types[fieldId].equals(BIGINT) && !types[fieldId].equals(DATE) && !types[fieldId].equals(TIMESTAMP)) {
             // we don't use Preconditions.checkArgument because it requires boxing fieldId, which affects inner loop performance
-            throw new IllegalArgumentException(String.format("Expected field to be %s or %s , actual %s (field %s)", BIGINT, TIMESTAMP, types[fieldId], fieldId));
+            throw new IllegalArgumentException(String.format("Expected field to be %s, %s or %s , actual %s (field %s)", BIGINT, DATE, TIMESTAMP, types[fieldId], fieldId));
         }
         if (!loaded[fieldId]) {
             parseLongColumn(fieldId);
@@ -385,53 +386,57 @@ class ColumnarBinaryHiveRecordCursor<K>
             return;
         }
         nulls[column] = false;
-        switch (hiveTypes[column]) {
-            case SHORT:
-                checkState(length == SIZE_OF_SHORT, "Short should be 2 bytes");
-                short smallintValue = unsafe.getShort(bytes, (long) Unsafe.ARRAY_BYTE_BASE_OFFSET + start);
-                longs[column] = Short.reverseBytes(smallintValue);
-                break;
-            case TIMESTAMP:
-                checkState(length >= 1, "Timestamp should be at least 1 byte");
-                long seconds = TimestampWritable.getSeconds(bytes, start);
-                long nanos = TimestampWritable.getNanos(bytes, start + SIZE_OF_INT);
-                longs[column] = (seconds * 1000) + (nanos / 1_000_000);
-                break;
-            case BYTE:
-                checkState(length == 1, "Byte should be 1 byte");
-                longs[column] = bytes[start];
-                break;
-            case INT:
-                checkState(length >= 1, "Int should be at least 1 byte");
-                if (length == 1) {
-                    longs[column] = bytes[start];
-                }
-                else {
-                    int value = 0;
-                    for (int i = 1; i < length; i++) {
-                        value <<= 8;
-                        value |= (bytes[start + i] & 0xFF);
-                    }
-                    longs[column] = WritableUtils.isNegativeVInt(bytes[start]) ? ~value : value;
-                }
-                break;
-            case LONG:
-                checkState(length >= 1, "Long should be at least 1 byte");
-                if (length == 1) {
-                    longs[column] = bytes[start];
-                }
-                else {
-                    long value = 0;
-                    for (int i = 1; i < length; i++) {
-                        value <<= 8;
-                        value |= (bytes[start + i] & 0xFF);
-                    }
-                    longs[column] = WritableUtils.isNegativeVInt(bytes[start]) ? ~value : value;
-                }
-                break;
-            default:
-                throw new RuntimeException(String.format("%s is not a valid LONG type", hiveTypes[column]));
+        if (hiveTypes[column].equals(HIVE_SHORT)) {
+            // the file format uses big endian
+            checkState(length == SIZE_OF_SHORT, "Short should be 2 bytes");
+            longs[column] = Short.reverseBytes(ByteArrays.getShort(bytes, start));
         }
+        else if (hiveTypes[column].equals(HIVE_DATE)) {
+            checkState(length >= 1, "Date should be at least 1 byte");
+            long daysSinceEpoch = readVInt(bytes, start, length);
+            longs[column] = daysSinceEpoch * MILLIS_IN_DAY;
+        }
+        else if (hiveTypes[column].equals(HIVE_TIMESTAMP)) {
+            checkState(length >= 1, "Timestamp should be at least 1 byte");
+            long seconds = TimestampWritable.getSeconds(bytes, start);
+            long nanos = TimestampWritable.getNanos(bytes, start + SIZE_OF_INT);
+            longs[column] = (seconds * 1000) + (nanos / 1_000_000);
+        }
+        else if (hiveTypes[column].equals(HIVE_BYTE)) {
+            checkState(length == 1, "Byte should be 1 byte");
+            longs[column] = bytes[start];
+        }
+        else if (hiveTypes[column].equals(HIVE_INT)) {
+            checkState(length >= 1, "Int should be at least 1 byte");
+            if (length == 1) {
+                longs[column] = bytes[start];
+            }
+            else {
+                longs[column] = readVInt(bytes, start, length);
+            }
+        }
+        else if (hiveTypes[column].equals(HIVE_LONG)) {
+            checkState(length >= 1, "Long should be at least 1 byte");
+            if (length == 1) {
+                longs[column] = bytes[start];
+            }
+            else {
+                longs[column] = readVInt(bytes, start, length);
+            }
+        }
+        else {
+            throw new RuntimeException(String.format("%s is not a valid LONG type", hiveTypes[column]));
+        }
+    }
+
+    private static long readVInt(byte[] bytes, int start, int length)
+    {
+        long value = 0;
+        for (int i = 1; i < length; i++) {
+            value <<= 8;
+            value |= (bytes[start + i] & 0xFF);
+        }
+        return WritableUtils.isNegativeVInt(bytes[start]) ? ~value : value;
     }
 
     @Override
@@ -483,19 +488,20 @@ class ColumnarBinaryHiveRecordCursor<K>
         }
         else {
             nulls[column] = false;
-            switch (hiveTypes[column]) {
-                case FLOAT:
-                    checkState(length == SIZE_OF_INT, "Float should be 4 bytes");
-                    int intBits = unsafe.getInt(bytes, (long) Unsafe.ARRAY_BYTE_BASE_OFFSET + start);
-                    doubles[column] = Float.intBitsToFloat(Integer.reverseBytes(intBits));
-                    break;
-                case DOUBLE:
-                    checkState(length == SIZE_OF_LONG, "Double should be 8 bytes");
-                    long longBits = unsafe.getLong(bytes, (long) Unsafe.ARRAY_BYTE_BASE_OFFSET + start);
-                    doubles[column] = Double.longBitsToDouble(Long.reverseBytes(longBits));
-                    break;
-                default:
-                    throw new RuntimeException(String.format("%s is not a valid DOUBLE type", hiveTypes[column]));
+            if (hiveTypes[column].equals(HIVE_FLOAT)) {
+                // the file format uses big endian
+                checkState(length == SIZE_OF_INT, "Float should be 4 bytes");
+                int intBits = ByteArrays.getInt(bytes, start);
+                doubles[column] = Float.intBitsToFloat(Integer.reverseBytes(intBits));
+            }
+            else if (hiveTypes[column].equals(HIVE_DOUBLE)) {
+                // the file format uses big endian
+                checkState(length == SIZE_OF_LONG, "Double should be 8 bytes");
+                long longBits = ByteArrays.getLong(bytes, start);
+                doubles[column] = Double.longBitsToDouble(Long.reverseBytes(longBits));
+            }
+            else {
+                throw new RuntimeException(String.format("%s is not a valid DOUBLE type", hiveTypes[column]));
             }
         }
     }
@@ -505,9 +511,10 @@ class ColumnarBinaryHiveRecordCursor<K>
     {
         checkState(!closed, "Cursor is closed");
 
-        if (!types[fieldId].equals(VARCHAR) && !types[fieldId].equals(VARBINARY)) {
+        Type type = types[fieldId];
+        if (!type.equals(VARCHAR) && !type.equals(VARBINARY) && !isStructuralType(hiveTypes[fieldId])) {
             // we don't use Preconditions.checkArgument because it requires boxing fieldId, which affects inner loop performance
-            throw new IllegalArgumentException(String.format("Expected field to be VARCHAR or VARBINARY, actual %s (field %s)", types[fieldId], fieldId));
+            throw new IllegalArgumentException(String.format("Expected field to be VARCHAR or VARBINARY, actual %s (field %s)", type, fieldId));
         }
 
         if (!loaded[fieldId]) {
@@ -548,13 +555,13 @@ class ColumnarBinaryHiveRecordCursor<K>
 
     private void parseStringColumn(int column, byte[] bytes, int start, int length)
     {
-        checkState(VALID_HIVE_STRING_TYPES.contains(hiveTypes[column]), "%s is not a valid STRING type", hiveTypes[column]);
+        checkState(VALID_HIVE_STRING_TYPES.contains(hiveTypes[column]) || VALID_HIVE_STRING_CATEGORIES.contains(hiveTypes[column].getCategory()), "%s is not a valid STRING type", hiveTypes[column]);
         if (length == 0) {
             nulls[column] = true;
         }
         else {
             nulls[column] = false;
-            if (hiveTypes[column] == HiveType.MAP || hiveTypes[column] == HiveType.LIST || hiveTypes[column] == HiveType.STRUCT) {
+            if (isStructuralType(hiveTypes[column])) {
                 // temporarily special case MAP, LIST, and STRUCT types as strings
                 // TODO: create a real parser for these complex types when we implement data types
                 LazyBinaryObject<? extends ObjectInspector> lazyObject = LazyBinaryFactory.createLazyBinaryObject(fieldInspectors[column]);
@@ -565,7 +572,7 @@ class ColumnarBinaryHiveRecordCursor<K>
             }
             else {
                 // TODO: zero length BINARY is not supported. See https://issues.apache.org/jira/browse/HIVE-2483
-                if (hiveTypes[column] == HiveType.STRING && (length == 1) && bytes[start] == HIVE_EMPTY_STRING_BYTE) {
+                if (hiveTypes[column].equals(HiveType.HIVE_STRING) && (length == 1) && bytes[start] == HIVE_EMPTY_STRING_BYTE) {
                     slices[column] = Slices.EMPTY_SLICE;
                 }
                 else {
@@ -598,8 +605,11 @@ class ColumnarBinaryHiveRecordCursor<K>
         else if (DOUBLE.equals(type)) {
             parseDoubleColumn(column);
         }
-        else if (VARCHAR.equals(type)) {
+        else if (VARCHAR.equals(type) || VARBINARY.equals(type) || isStructuralType(hiveTypes[column])) {
             parseStringColumn(column);
+        }
+        else if (DATE.equals(type)) {
+            parseLongColumn(column);
         }
         else if (TIMESTAMP.equals(type)) {
             parseLongColumn(column);

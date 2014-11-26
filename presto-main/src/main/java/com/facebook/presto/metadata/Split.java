@@ -21,6 +21,7 @@ import com.google.common.base.Function;
 
 import java.util.List;
 
+import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public final class Split
@@ -62,6 +63,15 @@ public final class Split
     public boolean isRemotelyAccessible()
     {
         return connectorSplit.isRemotelyAccessible();
+    }
+
+    @Override
+    public String toString()
+    {
+        return toStringHelper(this)
+                .add("connectorId", connectorId)
+                .add("connectorSplit", connectorSplit)
+                .toString();
     }
 
     public static Function<ConnectorSplit, Split> fromConnectorSplit(final String connectorId)

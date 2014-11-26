@@ -13,12 +13,11 @@
  */
 package com.facebook.presto.operator;
 
+import com.facebook.presto.Session;
 import com.facebook.presto.execution.StateMachine.StateChangeListener;
 import com.facebook.presto.execution.TaskId;
 import com.facebook.presto.execution.TaskState;
 import com.facebook.presto.execution.TaskStateMachine;
-import com.facebook.presto.spi.ConnectorSession;
-import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
 import io.airlift.stats.CounterStat;
 import io.airlift.units.DataSize;
@@ -47,14 +46,13 @@ public class TaskContext
 {
     private final TaskStateMachine taskStateMachine;
     private final Executor executor;
-    private final ConnectorSession session;
+    private final Session session;
 
     private final long maxMemory;
     private final DataSize operatorPreAllocatedMemory;
 
     private final AtomicLong memoryReservation = new AtomicLong();
 
-    private final DateTime createdTime = DateTime.now();
     private final long createNanos = System.nanoTime();
 
     private final AtomicLong startNanos = new AtomicLong();
@@ -66,9 +64,10 @@ public class TaskContext
 
     private final List<PipelineContext> pipelineContexts = new CopyOnWriteArrayList<>();
 
+    private final boolean verboseStats;
     private final boolean cpuTimerEnabled;
 
-    public TaskContext(TaskId taskId, Executor executor, ConnectorSession session)
+    public TaskContext(TaskId taskId, Executor executor, Session session)
     {
         this(
                 checkNotNull(taskId, "taskId is null"),
@@ -77,7 +76,17 @@ public class TaskContext
                 new DataSize(256, MEGABYTE));
     }
 
-    public TaskContext(TaskId taskId, Executor executor, ConnectorSession session, DataSize maxMemory)
+    public TaskContext(TaskId taskId, Executor executor, Session session, DataSize maxMemory)
+    {
+        this(
+                taskId,
+                executor,
+                session,
+                checkNotNull(maxMemory, "maxMemory is null"),
+                true);
+    }
+
+    public TaskContext(TaskId taskId, Executor executor, Session session, DataSize maxMemory, boolean cpuTimerEnabled)
     {
         this(
                 new TaskStateMachine(checkNotNull(taskId, "taskId is null"), checkNotSameThreadExecutor(executor, "executor is null")),
@@ -85,10 +94,17 @@ public class TaskContext
                 session,
                 checkNotNull(maxMemory, "maxMemory is null"),
                 new DataSize(1, MEGABYTE),
-                true);
+                true,
+                cpuTimerEnabled);
     }
 
-    public TaskContext(TaskStateMachine taskStateMachine, Executor executor, ConnectorSession session, DataSize maxMemory, DataSize operatorPreAllocatedMemory, boolean cpuTimerEnabled)
+    public TaskContext(TaskStateMachine taskStateMachine,
+            Executor executor,
+            Session session,
+            DataSize maxMemory,
+            DataSize operatorPreAllocatedMemory,
+            boolean verboseStats,
+            boolean cpuTimerEnabled)
     {
         this.taskStateMachine = checkNotNull(taskStateMachine, "taskStateMachine is null");
         this.executor = checkNotNull(executor, "executor is null");
@@ -108,6 +124,7 @@ public class TaskContext
             }
         });
 
+        this.verboseStats = verboseStats;
         this.cpuTimerEnabled = cpuTimerEnabled;
     }
 
@@ -123,12 +140,7 @@ public class TaskContext
         return pipelineContext;
     }
 
-    public List<PipelineContext> getPipelineContexts()
-    {
-        return ImmutableList.copyOf(pipelineContexts);
-    }
-
-    public ConnectorSession getSession()
+    public Session getSession()
     {
         return session;
     }
@@ -179,6 +191,11 @@ public class TaskContext
     {
         checkArgument(bytes <= memoryReservation.get(), "tried to free more memory than is reserved");
         memoryReservation.getAndAdd(-bytes);
+    }
+
+    public boolean isVerboseStats()
+    {
+        return verboseStats;
     }
 
     public boolean isCpuTimerEnabled()
@@ -245,7 +262,9 @@ public class TaskContext
 
         int totalDrivers = 0;
         int queuedDrivers = 0;
+        int queuedPartitionedDrivers = 0;
         int runningDrivers = 0;
+        int runningPartitionedDrivers = 0;
         int completedDrivers = 0;
 
         long totalScheduledTime = 0;
@@ -265,7 +284,9 @@ public class TaskContext
         for (PipelineStats pipeline : pipelineStats) {
             totalDrivers += pipeline.getTotalDrivers();
             queuedDrivers += pipeline.getQueuedDrivers();
+            queuedPartitionedDrivers += pipeline.getQueuedPartitionedDrivers();
             runningDrivers += pipeline.getRunningDrivers();
+            runningPartitionedDrivers += pipeline.getRunningPartitionedDrivers();
             completedDrivers += pipeline.getCompletedDrivers();
 
             totalScheduledTime += pipeline.getTotalScheduledTime().roundTo(NANOSECONDS);
@@ -303,7 +324,7 @@ public class TaskContext
         }
 
         return new TaskStats(
-                createdTime,
+                taskStateMachine.getCreatedTime(),
                 executionStartTime.get(),
                 lastExecutionStartTime.get(),
                 executionEndTime.get(),
@@ -311,7 +332,9 @@ public class TaskContext
                 queuedTime.convertToMostSuccinctTimeUnit(),
                 totalDrivers,
                 queuedDrivers,
+                queuedPartitionedDrivers,
                 runningDrivers,
+                runningPartitionedDrivers,
                 completedDrivers,
                 new DataSize(memoryReservation.get(), BYTE).convertToMostSuccinctDataSize(),
                 new Duration(totalScheduledTime, NANOSECONDS).convertToMostSuccinctTimeUnit(),
@@ -325,16 +348,5 @@ public class TaskContext
                 new DataSize(outputDataSize, BYTE).convertToMostSuccinctDataSize(),
                 outputPositions,
                 pipelineStats);
-    }
-
-    public static Function<TaskContext, TaskStats> taskStatsGetter()
-    {
-        return new Function<TaskContext, TaskStats>()
-        {
-            public TaskStats apply(TaskContext taskContext)
-            {
-                return taskContext.getTaskStats();
-            }
-        };
     }
 }

@@ -32,6 +32,11 @@ VARBINARY
 
     Variable length binary data.
 
+JSON
+----
+
+    Variable length json data.
+
 DATE
 ----
 
@@ -84,3 +89,30 @@ INTERVAL DAY TO SECOND
     Span of days, hours, minutes, seconds and milliseconds.
 
     Example: ``INTERVAL '2' DAY``
+
+.. _array_type:
+
+ARRAY
+-----
+
+    An array of the given component type.
+
+    Example: ``ARRAY[1, 2, 3]``
+
+.. _map_type:
+
+MAP
+---
+
+    A map between the given component types.
+
+.. _row_type:
+
+ROW
+---
+
+    A structure made up of named fields. The fields may be of any SQL type, and are
+    accessed with field reference operator ``.``
+
+    Example: ``my_column.my_field``
+

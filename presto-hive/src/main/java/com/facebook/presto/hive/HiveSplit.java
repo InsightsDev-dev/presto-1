@@ -16,15 +16,16 @@ package com.facebook.presto.hive;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.ConnectorSplit;
 import com.facebook.presto.spi.HostAddress;
+import com.facebook.presto.spi.TupleDomain;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import java.util.List;
 import java.util.Properties;
 
+import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -42,6 +43,8 @@ public class HiveSplit
     private final String table;
     private final String partitionName;
     private final ConnectorSession session;
+    private final TupleDomain<HiveColumnHandle> effectivePredicate;
+    private final boolean forceLocalScheduling;
 
     @JsonCreator
     public HiveSplit(
@@ -55,9 +58,10 @@ public class HiveSplit
             @JsonProperty("schema") Properties schema,
             @JsonProperty("partitionKeys") List<HivePartitionKey> partitionKeys,
             @JsonProperty("addresses") List<HostAddress> addresses,
-            @JsonProperty("session") ConnectorSession session)
+            @JsonProperty("forceLocalScheduling") boolean forceLocalScheduling,
+            @JsonProperty("session") ConnectorSession session,
+            @JsonProperty("effectivePredicate") TupleDomain<HiveColumnHandle> effectivePredicate)
     {
-        this.session = session;
         checkNotNull(clientId, "clientId is null");
         checkArgument(start >= 0, "start must be positive");
         checkArgument(length >= 0, "length must be positive");
@@ -68,6 +72,7 @@ public class HiveSplit
         checkNotNull(schema, "schema is null");
         checkNotNull(partitionKeys, "partitionKeys is null");
         checkNotNull(addresses, "addresses is null");
+        checkNotNull(effectivePredicate, "tupleDomain is null");
 
         this.clientId = clientId;
         this.database = database;
@@ -79,6 +84,9 @@ public class HiveSplit
         this.schema = schema;
         this.partitionKeys = ImmutableList.copyOf(partitionKeys);
         this.addresses = ImmutableList.copyOf(addresses);
+        this.forceLocalScheduling = forceLocalScheduling;
+        this.session = session;
+        this.effectivePredicate = effectivePredicate;
     }
 
     @JsonProperty
@@ -148,10 +156,22 @@ public class HiveSplit
         return session;
     }
 
+    @JsonProperty
+    public TupleDomain<HiveColumnHandle> getEffectivePredicate()
+    {
+        return effectivePredicate;
+    }
+
+    @JsonProperty
+    public boolean isForceLocalScheduling()
+    {
+        return forceLocalScheduling;
+    }
+
     @Override
     public boolean isRemotelyAccessible()
     {
-        return true;
+        return !forceLocalScheduling;
     }
 
     @Override
@@ -164,17 +184,20 @@ public class HiveSplit
                 .put("hosts", addresses)
                 .put("database", database)
                 .put("table", table)
+                .put("forceLocalScheduling", forceLocalScheduling)
                 .put("partitionName", partitionName)
+                .put("effectivePredicate", effectivePredicate)
                 .build();
     }
 
     @Override
     public String toString()
     {
-        return Objects.toStringHelper(this)
+        return toStringHelper(this)
                 .addValue(path)
                 .addValue(start)
                 .addValue(length)
+                .addValue(effectivePredicate)
                 .toString();
     }
 }

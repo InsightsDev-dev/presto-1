@@ -13,16 +13,16 @@
  */
 package com.facebook.presto.operator;
 
+import com.facebook.presto.spi.Page;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.block.BlockEncodingSerde;
-import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.net.MediaType;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
-import io.airlift.http.client.AsyncHttpClient;
+import io.airlift.http.client.HttpClient;
 import io.airlift.http.client.HttpClient.HttpResponseFuture;
 import io.airlift.http.client.HttpStatus;
 import io.airlift.http.client.HttpUriBuilder;
@@ -50,13 +50,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.facebook.presto.PrestoMediaTypes.PRESTO_PAGES_TYPE;
+import static com.facebook.presto.block.PagesSerde.readPages;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_MAX_SIZE;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_PAGE_NEXT_TOKEN;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_PAGE_TOKEN;
 import static com.facebook.presto.operator.HttpPageBufferClient.PagesResponse.createClosedResponse;
 import static com.facebook.presto.operator.HttpPageBufferClient.PagesResponse.createEmptyPagesResponse;
 import static com.facebook.presto.operator.HttpPageBufferClient.PagesResponse.createPagesResponse;
-import static com.facebook.presto.serde.PagesSerde.readPages;
+import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
 import static io.airlift.http.client.Request.Builder.prepareDelete;
@@ -94,7 +95,7 @@ public final class HttpPageBufferClient
         void clientFailed(HttpPageBufferClient client, Throwable cause);
     }
 
-    private final AsyncHttpClient httpClient;
+    private final HttpClient httpClient;
     private final DataSize maxResponseSize;
     private final Duration minErrorDuration;
     private final URI location;
@@ -125,7 +126,7 @@ public final class HttpPageBufferClient
     private final AtomicInteger requestsFailed = new AtomicInteger();
 
     public HttpPageBufferClient(
-            AsyncHttpClient httpClient,
+            HttpClient httpClient,
             DataSize maxResponseSize,
             Duration minErrorDuration,
             URI location,
@@ -137,7 +138,7 @@ public final class HttpPageBufferClient
     }
 
     public HttpPageBufferClient(
-            AsyncHttpClient httpClient,
+            HttpClient httpClient,
             DataSize maxResponseSize,
             Duration minErrorDuration,
             URI location,
@@ -383,7 +384,7 @@ public final class HttpPageBufferClient
                 state = "QUEUED";
             }
         }
-        return Objects.toStringHelper(this)
+        return toStringHelper(this)
                 .add("location", location)
                 .addValue(state)
                 .toString();
@@ -555,7 +556,7 @@ public final class HttpPageBufferClient
         @Override
         public String toString()
         {
-            return Objects.toStringHelper(this)
+            return toStringHelper(this)
                     .add("token", token)
                     .add("nextToken", nextToken)
                     .add("pagesSize", pages.size())

@@ -17,12 +17,17 @@ import com.datastax.driver.core.DataType;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.utils.Bytes;
 import com.facebook.presto.cassandra.util.CassandraCqlUtils;
+import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.type.BigintType;
 import com.facebook.presto.spi.type.BooleanType;
 import com.facebook.presto.spi.type.DoubleType;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.spi.type.VarcharType;
+import com.facebook.presto.spi.type.TimestampType;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.net.InetAddresses;
+import io.airlift.slice.Slice;
+import io.airlift.slice.Slices;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -33,8 +38,10 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
+import static com.facebook.presto.spi.StandardErrorCode.NOT_SUPPORTED;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.net.InetAddresses.toAddrString;
 
 public enum CassandraType
         implements FullCassandraType
@@ -51,7 +58,7 @@ public enum CassandraType
     INET(VarcharType.VARCHAR, InetAddress.class),
     INT(BigintType.BIGINT, Integer.class),
     TEXT(VarcharType.VARCHAR, String.class),
-    TIMESTAMP(BigintType.BIGINT, Date.class),
+    TIMESTAMP(TimestampType.TIMESTAMP, Date.class),
     UUID(VarcharType.VARCHAR, java.util.UUID.class),
     TIMEUUID(VarcharType.VARCHAR, java.util.UUID.class),
     VARCHAR(VarcharType.VARCHAR, String.class),
@@ -194,7 +201,7 @@ public enum CassandraType
                 case TIMESTAMP:
                     return row.getDate(i).getTime();
                 case INET:
-                    return row.getInet(i).toString();
+                    return toAddrString(row.getInet(i));
                 case VARINT:
                     return row.getVarint(i).toString();
                 case BLOB:
@@ -214,6 +221,17 @@ public enum CassandraType
                             + " is not implemented");
             }
         }
+    }
+
+    public static Comparable<?> getColumnValueForPartitionKey(Row row, int i, CassandraType cassandraType, List<CassandraType> typeArguments)
+    {
+        if (row.isNull(i)) {
+            return null;
+        }
+        if (cassandraType == ASCII || cassandraType == TEXT || cassandraType == VARCHAR) {
+            return Slices.utf8Slice(row.getString(i));
+        }
+        return getColumnValue(row, i, cassandraType, typeArguments);
     }
 
     private static String buildSetValue(Row row, int i, CassandraType elemType)
@@ -296,7 +314,7 @@ public enum CassandraType
                 case TIMESTAMP:
                     return Long.toString(row.getDate(i).getTime());
                 case INET:
-                    return row.getInet(i).toString();
+                    return CassandraCqlUtils.quoteStringLiteral(toAddrString(row.getInet(i)));
                 case VARINT:
                     return row.getVarint(i).toString();
                 case BLOB:
@@ -372,9 +390,10 @@ public enum CassandraType
             case BIGINT:
             case BOOLEAN:
             case DOUBLE:
-            case INET:
             case COUNTER:
                 return comparable;
+            case INET:
+                return InetAddresses.forString((String) comparable);
             case INT:
                 return ((Long) comparable).intValue();
             case FLOAT:
@@ -382,7 +401,9 @@ public enum CassandraType
                 return ((Double) comparable).floatValue();
             case DECIMAL:
                 // conversion can result in precision lost
-                return new BigDecimal((Double) comparable);
+                // Presto uses double for decimal, so to keep the floating point precision, convert it to string.
+                // Otherwise partition id doesn't match
+                return new BigDecimal(comparable.toString());
             case TIMESTAMP:
                 return new Date((Long) comparable);
             case UUID:
@@ -399,5 +420,56 @@ public enum CassandraType
             default:
                 throw new IllegalStateException("Back conversion not implemented for " + this);
         }
+    }
+
+    public Comparable<?> getValueForPartitionKey(Comparable<?> comparable)
+    {
+        switch (this) {
+            case ASCII:
+            case TEXT:
+            case VARCHAR:
+                if (comparable instanceof Slice) {
+                    return ((Slice) comparable).toStringUtf8();
+                }
+                return comparable;
+            case BIGINT:
+            case BOOLEAN:
+            case DOUBLE:
+            case INET:
+            case INT:
+            case FLOAT:
+            case DECIMAL:
+            case TIMESTAMP:
+            case UUID:
+            case TIMEUUID:
+                return comparable;
+            case COUNTER:
+            case BLOB:
+            case CUSTOM:
+            case VARINT:
+            case SET:
+            case LIST:
+            case MAP:
+            default:
+                // todo should we just skip partition pruning instead of throwing an exception?
+                throw new PrestoException(NOT_SUPPORTED, "Unsupport partition key type: " + this);
+        }
+    }
+
+    public static CassandraType toCassandraType(Type type)
+    {
+        if (type.equals(BooleanType.BOOLEAN)) {
+            return BOOLEAN;
+        }
+        else if (type.equals(BigintType.BIGINT)) {
+            return BIGINT;
+        }
+        else if (type.equals(DoubleType.DOUBLE)) {
+            return DOUBLE;
+        }
+        else if (type.equals(VarcharType.VARCHAR)) {
+            return TEXT;
+        }
+        throw new IllegalArgumentException("unsupported type: " + type);
     }
 }

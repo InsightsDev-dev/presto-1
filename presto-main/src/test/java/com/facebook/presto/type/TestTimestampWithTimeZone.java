@@ -13,8 +13,8 @@
  */
 package com.facebook.presto.type;
 
+import com.facebook.presto.Session;
 import com.facebook.presto.operator.scalar.FunctionAssertions;
-import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.type.SqlDate;
 import com.facebook.presto.spi.type.SqlTime;
 import com.facebook.presto.spi.type.SqlTimeWithTimeZone;
@@ -27,11 +27,10 @@ import org.joda.time.LocalDate;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
-import java.util.Locale;
-
 import static com.facebook.presto.spi.type.TimeZoneKey.getTimeZoneKey;
 import static com.facebook.presto.spi.type.TimeZoneKey.getTimeZoneKeyForOffset;
 import static com.facebook.presto.util.DateTimeZoneIndex.getDateTimeZone;
+import static java.util.Locale.ENGLISH;
 
 public class TestTimestampWithTimeZone
 {
@@ -40,13 +39,20 @@ public class TestTimestampWithTimeZone
     private static final TimeZoneKey BERLIN_TIME_ZONE_KEY = getTimeZoneKey("Europe/Berlin");
     private static final DateTimeZone BERLIN_ZONE = getDateTimeZone(BERLIN_TIME_ZONE_KEY);
 
-    private ConnectorSession session;
+    private Session session;
     private FunctionAssertions functionAssertions;
 
     @BeforeClass
     public void setUp()
     {
-        session = new ConnectorSession("user", "test", "catalog", "schema", getTimeZoneKey("+06:09"), Locale.ENGLISH, null, null);
+        session = Session.builder()
+                .setUser("user")
+                .setSource("test")
+                .setCatalog("catalog")
+                .setSchema("schema")
+                .setTimeZoneKey(getTimeZoneKey("+06:09"))
+                .setLocale(ENGLISH)
+                .build();
         functionAssertions = new FunctionAssertions(session);
     }
 
@@ -248,5 +254,23 @@ public class TestTimestampWithTimeZone
         assertFunction("cast(TIMESTAMP '2001-1-22 03:04:05 +07:09' as varchar)", "2001-01-22 03:04:05.000 +07:09");
         assertFunction("cast(TIMESTAMP '2001-1-22 03:04 +07:09' as varchar)", "2001-01-22 03:04:00.000 +07:09");
         assertFunction("cast(TIMESTAMP '2001-1-22 +07:09' as varchar)", "2001-01-22 00:00:00.000 +07:09");
+    }
+
+    @Test
+    public void testGreatest()
+            throws Exception
+    {
+        assertFunction(
+                "greatest(TIMESTAMP '2001-01-02 03:04:05.321 +07:09', TIMESTAMP '2001-01-02 04:04:05.321 +10:09')",
+                new SqlTimestampWithTimeZone(new DateTime(2001, 1, 2, 3, 4, 5, 321, WEIRD_ZONE).getMillis(), WEIRD_TIME_ZONE_KEY));
+    }
+
+    @Test
+    public void testLeast()
+            throws Exception
+    {
+        assertFunction(
+                "least(TIMESTAMP '2001-01-02 03:04:05.321 +07:09', TIMESTAMP '2001-01-02 01:04:05.321 +02:09')",
+                new SqlTimestampWithTimeZone(new DateTime(2001, 1, 2, 3, 4, 5, 321, WEIRD_ZONE).getMillis(), WEIRD_TIME_ZONE_KEY));
     }
 }

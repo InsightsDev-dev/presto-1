@@ -13,10 +13,9 @@
  */
 package com.facebook.presto.sql.planner;
 
+import com.facebook.presto.metadata.FunctionInfo;
 import com.facebook.presto.metadata.FunctionRegistry;
 import com.facebook.presto.metadata.Metadata;
-import com.facebook.presto.metadata.OperatorInfo;
-import com.facebook.presto.metadata.OperatorInfo.OperatorType;
 import com.facebook.presto.metadata.Signature;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.type.Type;
@@ -46,6 +45,7 @@ import java.util.List;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.BooleanType.BOOLEAN;
 import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
+import static com.facebook.presto.spi.type.TypeSignature.parseTypeSignature;
 import static com.facebook.presto.spi.type.VarcharType.VARCHAR;
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.TYPE_MISMATCH;
 import static com.facebook.presto.util.DateTimeUtils.parseDayTimeInterval;
@@ -91,7 +91,7 @@ public final class LiteralInterpreter
         }
 
         if (object == null) {
-            return new Cast(new NullLiteral(), type.getName());
+            return new Cast(new NullLiteral(), type.getTypeSignature().toString());
         }
 
         if (type.equals(BIGINT)) {
@@ -100,13 +100,15 @@ public final class LiteralInterpreter
 
         if (type.equals(DOUBLE)) {
             Double value = (Double) object;
+            // WARNING: the ORC predicate code depends on NaN and infinity not appearing in a tuple domain, so
+            // if you remove this, you will need to update the TupleDomainOrcPredicate
             if (value.isNaN()) {
                 return new FunctionCall(new QualifiedName("nan"), ImmutableList.<Expression>of());
             }
-            else if (value == Double.NEGATIVE_INFINITY) {
+            else if (value.equals(Double.NEGATIVE_INFINITY)) {
                 return new NegativeExpression(new FunctionCall(new QualifiedName("infinity"), ImmutableList.<Expression>of()));
             }
-            else if (value == Double.POSITIVE_INFINITY) {
+            else if (value.equals(Double.POSITIVE_INFINITY)) {
                 return new FunctionCall(new QualifiedName("infinity"), ImmutableList.<Expression>of());
             }
             else {
@@ -176,14 +178,14 @@ public final class LiteralInterpreter
         @Override
         protected Object visitGenericLiteral(GenericLiteral node, ConnectorSession session)
         {
-            Type type = metadata.getType(node.getType());
+            Type type = metadata.getType(parseTypeSignature(node.getType()));
             if (type == null) {
                 throw new SemanticException(TYPE_MISMATCH, node, "Unknown type: " + node.getType());
             }
 
-            OperatorInfo operator;
+            FunctionInfo operator;
             try {
-                operator = metadata.getExactOperator(OperatorType.CAST, type, ImmutableList.of(VARCHAR));
+                operator = metadata.getFunctionRegistry().getCoercion(VARCHAR, type);
             }
             catch (IllegalArgumentException e) {
                 throw new SemanticException(TYPE_MISMATCH, node, "No literal form for type %s", type);

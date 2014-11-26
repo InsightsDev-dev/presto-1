@@ -15,23 +15,20 @@ package com.facebook.presto.operator;
 
 import com.facebook.presto.execution.TaskId;
 import com.facebook.presto.operator.MarkDistinctOperator.MarkDistinctOperatorFactory;
-import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.spi.Page;
 import com.facebook.presto.testing.MaterializedResult;
-import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 
-import static com.facebook.presto.operator.OperatorAssertion.appendSampleWeight;
+import static com.facebook.presto.SessionTestUtils.TEST_SESSION;
 import static com.facebook.presto.operator.RowPagesBuilder.rowPagesBuilder;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.BooleanType.BOOLEAN;
-import static com.facebook.presto.spi.type.TimeZoneKey.UTC_KEY;
 import static com.facebook.presto.testing.MaterializedResult.resultBuilder;
 import static io.airlift.concurrent.Threads.daemonThreadsNamed;
 import static java.util.concurrent.Executors.newCachedThreadPool;
@@ -46,8 +43,7 @@ public class TestMarkDistinctOperator
     public void setUp()
     {
         executor = newCachedThreadPool(daemonThreadsNamed("test"));
-        ConnectorSession session = new ConnectorSession("user", "source", "catalog", "schema", UTC_KEY, Locale.ENGLISH, "address", "agent");
-        driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, session)
+        driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, TEST_SESSION)
                 .addPipelineContext(true, true)
                 .addDriverContext();
     }
@@ -59,29 +55,6 @@ public class TestMarkDistinctOperator
     }
 
     @Test
-    public void testSampledMarkDistinct()
-            throws Exception
-    {
-        List<Page> input = rowPagesBuilder(BIGINT)
-                .addSequencePage(100, 0)
-                .addSequencePage(100, 0)
-                .build();
-        input = appendSampleWeight(input, 2);
-
-        OperatorFactory operatorFactory = new MarkDistinctOperatorFactory(0, ImmutableList.of(BIGINT, BIGINT), ImmutableList.of(0), Optional.of(1));
-        Operator operator = operatorFactory.createOperator(driverContext);
-
-        MaterializedResult.Builder expected = resultBuilder(driverContext.getSession(), BIGINT, BIGINT, BOOLEAN);
-        for (int i = 0; i < 100; i++) {
-            expected.row(i, 1, true);
-            expected.row(i, 1, false);
-            expected.row(i, 2, false);
-        }
-
-        OperatorAssertion.assertOperatorEqualsIgnoreOrder(operator, input, expected.build());
-    }
-
-    @Test
     public void testMarkDistinct()
             throws Exception
     {
@@ -90,7 +63,7 @@ public class TestMarkDistinctOperator
                 .addSequencePage(100, 0)
                 .build();
 
-        OperatorFactory operatorFactory = new MarkDistinctOperatorFactory(0, ImmutableList.of(BIGINT), ImmutableList.of(0), Optional.<Integer>absent());
+        OperatorFactory operatorFactory = new MarkDistinctOperatorFactory(0, ImmutableList.of(BIGINT), ImmutableList.of(0));
         Operator operator = operatorFactory.createOperator(driverContext);
 
         MaterializedResult.Builder expected = resultBuilder(driverContext.getSession(), BIGINT, BOOLEAN);

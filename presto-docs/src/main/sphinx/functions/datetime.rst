@@ -22,6 +22,17 @@ Operator Example                                               Result
 ``-``    ``interval '3' year - interval '5' month``            ``2-7``
 ======== ===================================================== ===========================
 
+Time Zone Conversion
+--------------------
+
+The ``AT TIME ZONE`` operator sets the time zone of a timestamp::
+
+    SELECT timestamp '2012-10-31 01:00 UTC';
+    2012-10-31 01:00:00.000 UTC
+
+    SELECT timestamp '2012-10-31 01:00 UTC' AT TIME ZONE 'America/Los_Angeles';
+    2012-10-30 18:00:00.000 America/Los_Angeles
+
 Date and Time Functions
 -----------------------
 
@@ -37,6 +48,11 @@ Date and Time Functions
 
     Returns the current timestamp as of the start of the query.
 
+.. function:: current_timezone() -> varchar
+
+    Returns the current time zone in the format defined by IANA
+    (e.g., ``America/Los_Angeles``) or as fixed offset from UTC (e.g., ``+08:35``)
+
 .. function:: from_unixtime(unixtime) -> timestamp
 
     Returns the UNIX timestamp ``unixtime`` as a timestamp.
@@ -50,7 +66,7 @@ Date and Time Functions
 
     Returns the current time as of the start of the query.
 
-.. function:: localtimestamp -> time
+.. function:: localtimestamp -> timestamp
 
     Returns the current timestamp as of the start of the query.
 

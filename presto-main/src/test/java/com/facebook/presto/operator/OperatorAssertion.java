@@ -13,23 +13,25 @@
  */
 package com.facebook.presto.operator;
 
-import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.Session;
+import com.facebook.presto.spi.Page;
 import com.facebook.presto.spi.block.Block;
 import com.facebook.presto.spi.block.BlockBuilder;
 import com.facebook.presto.spi.block.BlockBuilderStatus;
 import com.facebook.presto.spi.type.Type;
-import com.facebook.presto.util.IterableTransformer;
 import com.facebook.presto.testing.MaterializedResult;
+import com.facebook.presto.util.IterableTransformer;
 import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
 
+import java.util.Iterator;
 import java.util.List;
 
 import static com.facebook.presto.operator.PageAssertions.assertPageEquals;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static io.airlift.testing.Assertions.assertEqualsIgnoreOrder;
 import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.assertTrue;
 
 public final class OperatorAssertion
 {
@@ -46,7 +48,7 @@ public final class OperatorAssertion
             {
                 BlockBuilder builder = BIGINT.createBlockBuilder(new BlockBuilderStatus());
                 for (int i = 0; i < page.getPositionCount(); i++) {
-                    builder.appendLong(sampleWeight);
+                    BIGINT.writeLong(builder, sampleWeight);
                 }
                 Block[] blocks = new Block[page.getChannelCount() + 1];
                 System.arraycopy(page.getBlocks(), 0, blocks, 0, page.getChannelCount());
@@ -56,22 +58,26 @@ public final class OperatorAssertion
         }).list();
     }
 
-    public static List<Page> toPages(Operator operator, List<Page> input)
+    public static List<Page> toPages(Operator operator, Iterator<Page> input)
     {
         ImmutableList.Builder<Page> outputPages = ImmutableList.builder();
 
-        // verify initial state
-        assertEquals(operator.isFinished(), false);
-        assertEquals(operator.needsInput(), true);
-        assertEquals(operator.getOutput(), null);
+        while (input.hasNext()) {
+            Page inputPage = input.next();
 
-        // process input pages
-        for (Page inputPage : input) {
             // read output until input is needed or operator is finished
+            int nullPages = 0;
             while (!operator.needsInput() && !operator.isFinished()) {
                 Page outputPage = operator.getOutput();
-                assertNotNull(outputPage);
-                outputPages.add(outputPage);
+                if (outputPage == null) {
+                    // break infinite loop due to null pages
+                    assertTrue(nullPages < 1_000_000, "Too many null pages; infinite loop?");
+                    nullPages++;
+                }
+                else {
+                    outputPages.add(outputPage);
+                    nullPages = 0;
+                }
             }
 
             if (operator.isFinished()) {
@@ -94,6 +100,16 @@ public final class OperatorAssertion
         // add remaining output pages
         addRemainingOutputPages(operator, outputPages);
         return outputPages.build();
+    }
+
+    public static List<Page> toPages(Operator operator, List<Page> input)
+    {
+        // verify initial state
+        assertEquals(operator.isFinished(), false);
+        assertEquals(operator.needsInput(), true);
+        assertEquals(operator.getOutput(), null);
+
+        return toPages(operator, input.iterator());
     }
 
     public static List<Page> toPages(Operator operator)
@@ -126,7 +142,7 @@ public final class OperatorAssertion
         assertEquals(operator.getOutput(), null);
     }
 
-    public static MaterializedResult toMaterializedResult(ConnectorSession session, List<Type> types, List<Page> pages)
+    public static MaterializedResult toMaterializedResult(Session session, List<Type> types, List<Page> pages)
     {
         // materialize pages
         MaterializedResult.Builder resultBuilder = MaterializedResult.resultBuilder(session, types);
@@ -141,7 +157,7 @@ public final class OperatorAssertion
         List<Page> actual = toPages(operator);
         assertEquals(actual.size(), expected.size());
         for (int i = 0; i < actual.size(); i++) {
-            assertPageEquals(actual.get(i), expected.get(i));
+            assertPageEquals(operator.getTypes(), actual.get(i), expected.get(i));
         }
     }
 
@@ -150,7 +166,7 @@ public final class OperatorAssertion
         List<Page> actual = toPages(operator, input);
         assertEquals(actual.size(), expected.size());
         for (int i = 0; i < actual.size(); i++) {
-            assertPageEquals(actual.get(i), expected.get(i));
+            assertPageEquals(operator.getTypes(), actual.get(i), expected.get(i));
         }
     }
 

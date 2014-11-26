@@ -15,26 +15,23 @@ package com.facebook.presto.operator;
 
 import com.facebook.presto.execution.TaskId;
 import com.facebook.presto.operator.TopNOperator.TopNOperatorFactory;
-import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.spi.Page;
 import com.facebook.presto.testing.MaterializedResult;
-import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 
-import static com.facebook.presto.operator.OperatorAssertion.appendSampleWeight;
+import static com.facebook.presto.SessionTestUtils.TEST_SESSION;
 import static com.facebook.presto.operator.OperatorAssertion.assertOperatorEquals;
 import static com.facebook.presto.operator.RowPagesBuilder.rowPagesBuilder;
 import static com.facebook.presto.spi.block.SortOrder.ASC_NULLS_LAST;
 import static com.facebook.presto.spi.block.SortOrder.DESC_NULLS_LAST;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
-import static com.facebook.presto.spi.type.TimeZoneKey.UTC_KEY;
 import static com.facebook.presto.spi.type.VarcharType.VARCHAR;
 import static com.facebook.presto.testing.MaterializedResult.resultBuilder;
 import static io.airlift.concurrent.Threads.daemonThreadsNamed;
@@ -50,8 +47,7 @@ public class TestTopNOperator
     public void setUp()
     {
         executor = newCachedThreadPool(daemonThreadsNamed("test"));
-        ConnectorSession session = new ConnectorSession("user", "source", "catalog", "schema", UTC_KEY, Locale.ENGLISH, "address", "agent");
-        driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, session)
+        driverContext = new TaskContext(new TaskId("query", "stage", "task"), executor, TEST_SESSION)
                 .addPipelineContext(true, true)
                 .addDriverContext();
     }
@@ -60,45 +56,6 @@ public class TestTopNOperator
     public void tearDown()
     {
         executor.shutdownNow();
-    }
-
-    @Test
-    public void testSampledTopN()
-            throws Exception
-    {
-        List<Page> input = rowPagesBuilder(BIGINT, DOUBLE)
-                .row(1, 0.1)
-                .row(2, 0.2)
-                .pageBreak()
-                .row(-1, -0.1)
-                .row(4, 0.4)
-                .pageBreak()
-                .row(5, 0.5)
-                .row(4, 0.41)
-                .row(6, 0.6)
-                .row(5, 0.5)
-                .pageBreak()
-                .build();
-        input = appendSampleWeight(input, 2);
-
-        TopNOperatorFactory factory = new TopNOperatorFactory(
-                0,
-                ImmutableList.of(BIGINT, DOUBLE, BIGINT),
-                5,
-                ImmutableList.of(0),
-                ImmutableList.of(DESC_NULLS_LAST),
-                Optional.of(input.get(0).getChannelCount() - 1),
-                false);
-
-        Operator operator = factory.createOperator(driverContext);
-
-        MaterializedResult expected = resultBuilder(driverContext.getSession(), BIGINT, DOUBLE, BIGINT)
-                .row(6, 0.6, 2)
-                .row(5, 0.5, 1)
-                .row(5, 0.5, 2)
-                .build();
-
-        assertOperatorEquals(operator, input, expected);
     }
 
     @Test
@@ -124,7 +81,6 @@ public class TestTopNOperator
                 2,
                 ImmutableList.of(0),
                 ImmutableList.of(DESC_NULLS_LAST),
-                Optional.<Integer>absent(),
                 false);
 
         Operator operator = factory.createOperator(driverContext);
@@ -159,7 +115,6 @@ public class TestTopNOperator
                 3,
                 ImmutableList.of(0, 1),
                 ImmutableList.of(DESC_NULLS_LAST, DESC_NULLS_LAST),
-                Optional.<Integer>absent(),
                 false);
 
         Operator operator = operatorFactory.createOperator(driverContext);
@@ -196,7 +151,6 @@ public class TestTopNOperator
                 2,
                 ImmutableList.of(0),
                 ImmutableList.of(ASC_NULLS_LAST),
-                Optional.<Integer>absent(),
                 false);
 
         Operator operator = operatorFactory.createOperator(driverContext);

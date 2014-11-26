@@ -16,16 +16,19 @@ package com.facebook.presto.operator.index;
 import com.facebook.presto.operator.GroupByHash;
 import com.facebook.presto.spi.RecordCursor;
 import com.facebook.presto.spi.RecordSet;
-import com.facebook.presto.spi.block.BlockCursor;
+import com.facebook.presto.spi.block.Block;
 import com.facebook.presto.spi.type.Type;
 import com.google.common.collect.ImmutableList;
+import com.google.common.primitives.Ints;
 import io.airlift.slice.Slice;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 import it.unimi.dsi.fastutil.ints.IntListIterator;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import static com.facebook.presto.operator.index.IndexSnapshot.UNLOADED_INDEX_KEY;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -37,42 +40,44 @@ public class UnloadedIndexKeyRecordSet
     private final List<Type> types;
     private final List<PageAndPositions> pageAndPositions;
 
-    public UnloadedIndexKeyRecordSet(IndexSnapshot existingSnapshot, List<Type> types, List<UpdateRequest> requests)
+    public UnloadedIndexKeyRecordSet(IndexSnapshot existingSnapshot, Set<Integer> channelsForDistinct, List<Type> types, List<UpdateRequest> requests)
     {
         checkNotNull(existingSnapshot, "existingSnapshot is null");
         this.types = ImmutableList.copyOf(checkNotNull(types, "types is null"));
         checkNotNull(requests, "requests is null");
 
-        // Distinct is essentially a group by on all channels
-        int[] allChannels = new int[types.size()];
-        for (int i = 0; i < allChannels.length; i++) {
-            allChannels[i] = i;
+        int[] distinctChannels = Ints.toArray(channelsForDistinct);
+        int[] normalizedDistinctChannels = new int[distinctChannels.length];
+        List<Type> distinctChannelTypes = new ArrayList<>(distinctChannels.length);
+        for (int i = 0; i < distinctChannels.length; i++) {
+            normalizedDistinctChannels[i] = i;
+            distinctChannelTypes.add(types.get(distinctChannels[i]));
         }
 
         ImmutableList.Builder<PageAndPositions> builder = ImmutableList.builder();
         long nextDistinctId = 0;
-        GroupByHash groupByHash = new GroupByHash(types, allChannels, 10_000);
+        GroupByHash groupByHash = new GroupByHash(distinctChannelTypes, normalizedDistinctChannels, 10_000);
         for (UpdateRequest request : requests) {
             IntList positions = new IntArrayList();
+            Block[] blocks = request.getBlocks();
 
-            BlockCursor[] cursors = request.duplicateCursors();
+            Block[] distinctBlocks = new Block[distinctChannels.length];
+            for (int i = 0; i < distinctBlocks.length; i++) {
+                distinctBlocks[i] = blocks[distinctChannels[i]];
+            }
 
             // Move through the positions while advancing the cursors in lockstep
-            int positionCount = cursors[0].getRemainingPositions() + 1;
-            for (int index = 0; index < positionCount; index++) {
-                // cursors are start at valid position, so we don't need to advance the first time
-                if (index > 0) {
-                    for (BlockCursor cursor : cursors) {
-                        checkState(cursor.advanceNextPosition());
-                    }
-                }
-
-                if (groupByHash.putIfAbsent(cursors) == nextDistinctId) {
-                    nextDistinctId++;
-
+            int positionCount = blocks[0].getPositionCount();
+            for (int position = 0; position < positionCount; position++) {
+                // We are reading ahead in the cursors, so we need to filter any nulls since they can not join
+                if (!containsNullValue(position, blocks)) {
                     // Only include the key if it is not already in the index
-                    if (existingSnapshot.getJoinPosition(cursors) == UNLOADED_INDEX_KEY) {
-                        positions.add(cursors[0].getPosition());
+                    if (existingSnapshot.getJoinPosition(position, blocks) == UNLOADED_INDEX_KEY) {
+                        // Only add the position if we have not seen this tuple before (based on the distinct channels)
+                        if (groupByHash.putIfAbsent(position, distinctBlocks) == nextDistinctId) {
+                            nextDistinctId++;
+                            positions.add(position);
+                        }
                     }
                 }
             }
@@ -97,19 +102,30 @@ public class UnloadedIndexKeyRecordSet
         return new UnloadedIndexKeyRecordCursor(types, pageAndPositions);
     }
 
+    private static boolean containsNullValue(int position, Block... blocks)
+    {
+        for (Block block : blocks) {
+            if (block.isNull(position)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static class UnloadedIndexKeyRecordCursor
             implements RecordCursor
     {
         private final List<Type> types;
         private final Iterator<PageAndPositions> pageAndPositionsIterator;
-        private BlockCursor[] cursors;
+        private Block[] blocks;
         private IntListIterator positionIterator;
+        private int position;
 
         public UnloadedIndexKeyRecordCursor(List<Type> types, List<PageAndPositions> pageAndPositions)
         {
             this.types = ImmutableList.copyOf(checkNotNull(types, "types is null"));
             this.pageAndPositionsIterator = checkNotNull(pageAndPositions, "pageAndPositions is null").iterator();
-            this.cursors = new BlockCursor[types.size()];
+            this.blocks = new Block[types.size()];
         }
 
         @Override
@@ -144,52 +160,54 @@ public class UnloadedIndexKeyRecordSet
                     return false;
                 }
                 PageAndPositions pageAndPositions = pageAndPositionsIterator.next();
-                cursors = pageAndPositions.getUpdateRequest().duplicateCursors();
-                checkState(types.size() == cursors.length);
+                blocks = pageAndPositions.getUpdateRequest().getBlocks();
+                checkState(types.size() == blocks.length);
                 positionIterator = pageAndPositions.getPositions().iterator();
             }
 
-            int position = positionIterator.nextInt();
-            for (BlockCursor cursor : cursors) {
-                checkState(cursor.advanceToPosition(position));
-            }
+            position = positionIterator.nextInt();
 
             return true;
         }
 
-        public BlockCursor[] asBlockCursors()
+        public Block[] getBlocks()
         {
-            return cursors;
+            return blocks;
+        }
+
+        public int getPosition()
+        {
+            return position;
         }
 
         @Override
         public boolean getBoolean(int field)
         {
-            return cursors[field].getBoolean();
+            return types.get(field).getBoolean(blocks[field], position);
         }
 
         @Override
         public long getLong(int field)
         {
-            return cursors[field].getLong();
+            return types.get(field).getLong(blocks[field], position);
         }
 
         @Override
         public double getDouble(int field)
         {
-            return cursors[field].getDouble();
+            return types.get(field).getDouble(blocks[field], position);
         }
 
         @Override
         public Slice getSlice(int field)
         {
-            return cursors[field].getSlice();
+            return types.get(field).getSlice(blocks[field], position);
         }
 
         @Override
         public boolean isNull(int field)
         {
-            return cursors[field].isNull();
+            return blocks[field].isNull(position);
         }
 
         @Override

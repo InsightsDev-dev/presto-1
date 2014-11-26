@@ -13,6 +13,8 @@
  */
 package com.facebook.presto.sql.tree;
 
+import com.google.common.base.Function;
+
 import javax.annotation.Nullable;
 
 public abstract class AstVisitor<R, C>
@@ -302,6 +304,16 @@ public abstract class AstVisitor<R, C>
         return visitExpression(node, context);
     }
 
+    protected R visitArrayConstructor(ArrayConstructor node, C context)
+    {
+        return visitExpression(node, context);
+    }
+
+    protected R visitSubscriptExpression(SubscriptExpression node, C context)
+    {
+        return visitExpression(node, context);
+    }
+
     protected R visitLongLiteral(LongLiteral node, C context)
     {
         return visitLiteral(node, context);
@@ -325,6 +337,11 @@ public abstract class AstVisitor<R, C>
     protected R visitTable(Table node, C context)
     {
         return visitQueryBody(node, context);
+    }
+
+    protected R visitUnnest(Unnest node, C context)
+    {
+        return visitRelation(node, context);
     }
 
     protected R visitValues(Values node, C context)
@@ -367,27 +384,64 @@ public abstract class AstVisitor<R, C>
         return visitExpression(node, context);
     }
 
-    public R visitInputReference(InputReference node, C context)
+    protected R visitInputReference(InputReference node, C context)
     {
         return visitExpression(node, context);
     }
 
-    public R visitWindow(Window node, C context)
+    protected R visitWindow(Window node, C context)
     {
         return visitNode(node, context);
     }
 
-    public R visitWindowFrame(WindowFrame node, C context)
+    protected R visitWindowFrame(WindowFrame node, C context)
     {
         return visitNode(node, context);
     }
 
-    public R visitFrameBound(FrameBound node, C context)
+    protected R visitFrameBound(FrameBound node, C context)
     {
         return visitNode(node, context);
     }
 
     protected R visitCreateTable(CreateTable node, C context)
+    {
+        return visitStatement(node, context);
+    }
+
+    protected R visitDropTable(DropTable node, C context)
+    {
+        return visitStatement(node, context);
+    }
+
+    protected R visitRenameTable(RenameTable node, C context)
+    {
+        return visitStatement(node, context);
+    }
+
+    protected R visitCreateView(CreateView node, C context)
+    {
+        return visitStatement(node, context);
+    }
+
+    protected R visitDropView(DropView node, C context)
+    {
+        return visitStatement(node, context);
+    }
+
+    public Function<Node, R> processFunction(final C context)
+    {
+        return new Function<Node, R>()
+        {
+            @Override
+            public R apply(Node input)
+            {
+                return process(input, context);
+            }
+        };
+    }
+
+    protected R visitInsert(Insert node, C context)
     {
         return visitNode(node, context);
     }

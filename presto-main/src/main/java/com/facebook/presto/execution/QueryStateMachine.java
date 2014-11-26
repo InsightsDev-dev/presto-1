@@ -14,14 +14,15 @@
 package com.facebook.presto.execution;
 
 import com.facebook.presto.ErrorCodes;
+import com.facebook.presto.Session;
 import com.facebook.presto.client.FailureInfo;
 import com.facebook.presto.execution.StateMachine.StateChangeListener;
-import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.ErrorCode;
 import com.facebook.presto.spi.PrestoException;
-import com.facebook.presto.spi.StandardErrorCode;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
+import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import io.airlift.log.Logger;
@@ -43,6 +44,8 @@ import static com.facebook.presto.execution.QueryState.FAILED;
 import static com.facebook.presto.execution.QueryState.FINISHED;
 import static com.facebook.presto.execution.QueryState.inDoneState;
 import static com.facebook.presto.execution.StageInfo.getAllStages;
+import static com.facebook.presto.execution.StageInfo.stageStateGetter;
+import static com.facebook.presto.spi.StandardErrorCode.USER_CANCELED;
 import static com.facebook.presto.util.Failures.toFailure;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.airlift.units.DataSize.Unit.BYTE;
@@ -59,7 +62,7 @@ public class QueryStateMachine
 
     private final QueryId queryId;
     private final String query;
-    private final ConnectorSession session;
+    private final Session session;
     private final URI self;
 
     @GuardedBy("this")
@@ -90,7 +93,7 @@ public class QueryStateMachine
     @GuardedBy("this")
     private Set<Input> inputs = ImmutableSet.of();
 
-    public QueryStateMachine(QueryId queryId, String query, ConnectorSession session, URI self, Executor executor)
+    public QueryStateMachine(QueryId queryId, String query, Session session, URI self, Executor executor)
     {
         this.queryId = checkNotNull(queryId, "queryId is null");
         this.query = checkNotNull(query, "query is null");
@@ -113,7 +116,7 @@ public class QueryStateMachine
         return queryId;
     }
 
-    public ConnectorSession getSession()
+    public Session getSession()
     {
         return session;
     }
@@ -237,6 +240,7 @@ public class QueryStateMachine
         return new QueryInfo(queryId,
                 session,
                 state,
+                isScheduled(rootStage),
                 self,
                 outputFieldNames,
                 query,
@@ -319,7 +323,7 @@ public class QueryStateMachine
         }
         synchronized (this) {
             if (failureCause == null) {
-                failureCause = new PrestoException(StandardErrorCode.USER_CANCELED.toErrorCode(), "Query was canceled");
+                failureCause = new PrestoException(USER_CANCELED, "Query was canceled");
             }
         }
         return queryState.setIf(CANCELED, Predicates.not(inDoneState()));
@@ -376,5 +380,27 @@ public class QueryStateMachine
     public synchronized void recordDistributedPlanningTime(long distributedPlanningStart)
     {
         distributedPlanningTime = Duration.nanosSince(distributedPlanningStart).convertToMostSuccinctTimeUnit();
+    }
+
+    private static boolean isScheduled(StageInfo rootStage)
+    {
+        if (rootStage == null) {
+            return false;
+        }
+        return FluentIterable.from(getAllStages(rootStage))
+                .transform(stageStateGetter())
+                .allMatch(isStageRunningOrDone());
+    }
+
+    private static Predicate<StageState> isStageRunningOrDone()
+    {
+        return new Predicate<StageState>()
+        {
+            @Override
+            public boolean apply(StageState state)
+            {
+                return (state == StageState.RUNNING) || state.isDone();
+            }
+        };
     }
 }

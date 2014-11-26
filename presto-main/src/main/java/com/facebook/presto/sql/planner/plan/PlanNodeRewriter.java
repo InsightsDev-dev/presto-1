@@ -50,6 +50,11 @@ public class PlanNodeRewriter<C>
         return rewriteNode(node, context, planRewriter);
     }
 
+    public PlanNode rewriteUnnest(UnnestNode node, C context, PlanRewriter<C> planRewriter)
+    {
+        return rewriteNode(node, context, planRewriter);
+    }
+
     public PlanNode rewriteProject(ProjectNode node, C context, PlanRewriter<C> planRewriter)
     {
         return rewriteNode(node, context, planRewriter);
@@ -95,12 +100,17 @@ public class PlanNodeRewriter<C>
         return rewriteNode(node, context, planRewriter);
     }
 
-    public PlanNode rewriteMaterializeSample(MaterializeSampleNode node, C context, PlanRewriter<C> planRewriter)
+    public PlanNode rewriteWindow(WindowNode node, C context, PlanRewriter<C> planRewriter)
     {
         return rewriteNode(node, context, planRewriter);
     }
 
-    public PlanNode rewriteWindow(WindowNode node, C context, PlanRewriter<C> planRewriter)
+    public PlanNode rewriteTopNRowNumber(TopNRowNumberNode node, C context, PlanRewriter<C> planRewriter)
+    {
+        return rewriteNode(node, context, planRewriter);
+    }
+
+    public PlanNode rewriteRowNumber(RowNumberNode node, C context, PlanRewriter<C> planRewriter)
     {
         return rewriteNode(node, context, planRewriter);
     }
