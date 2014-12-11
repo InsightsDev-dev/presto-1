@@ -64,7 +64,7 @@ public class ProteumRecordCursor implements RecordCursor
         }
         try{
             String path = url.toString()+"?";
-            path+=buildColumnURL(columnHandles)+":";
+            path+=buildColumnURL(columnHandles)+"|";
             path+=buildFilterURL(filters);
             url = new URL(path);
             HttpURLConnection connection = (HttpURLConnection)url.openConnection();
@@ -98,7 +98,7 @@ public class ProteumRecordCursor implements RecordCursor
         
         
         
-        return "filters={"+Joiner.on("&&").join(filters)+"}";
+        return "filters={"+Joiner.on(",").join(filters)+"}";
     }
 
     @Override
