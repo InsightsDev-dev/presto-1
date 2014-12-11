@@ -36,22 +36,6 @@ public class ProteumColumnFilter {
         this.domain = domain;
         this.columnHandle = columnHandle;
         ranges = new ArrayList<String>();
-        for(Range range : domain.getRanges()){
-            String currentRange;
-            if(range.isSingleValue()){
-                currentRange = "["+getStringValue(range.getLow())+"%20"+getStringValue(range.getLow())+"]";
-                ranges.add(currentRange);
-            }
-            else{
-                StringBuilder sb = new StringBuilder();
-                sb.append((range.getLow().getBound() == Marker.Bound.EXACTLY) ? '[' : '(');
-                sb.append(range.getLow().isLowerUnbounded() ? "min" : getStringValue(range.getLow()));
-                sb.append("%20");
-                sb.append(range.getHigh().isUpperUnbounded() ? "max" : getStringValue( range.getHigh()));
-                sb.append((range.getHigh().getBound() == Marker.Bound.EXACTLY) ? ']' : ')');
-                ranges.add(sb.toString());
-            }
-        }
     }
     
     private String getStringValue(Marker marker){
@@ -73,8 +57,80 @@ public class ProteumColumnFilter {
     
     @Override
     public String toString() {
-        String result = columnHandle.getColumnName()+":";
-        result+=Joiner.on(":").join(ranges);
-        return result;
+    	StringBuilder sb = new StringBuilder();
+    	int domainNum = 1;
+    	int numOfDomains = domain.getRanges().getRangeCount();
+    	String columnName = columnHandle.getColumnName();
+    	System.out.println(domain.getRanges());
+    	sb.append("(");
+		for (Range range : domain.getRanges()) {
+			if (range.isSingleValue()) {
+				sb.append(columnName);
+				sb.append("=");
+				sb.append(getStringValue(range.getLow()));
+			} else {
+				// filter corresponds to <=, <
+				if(range.getLow().isLowerUnbounded() && range.getHigh().getBound() == Marker.Bound.EXACTLY) {
+					sb.append(columnName);
+					sb.append("%20");
+					sb.append("<=");
+					sb.append("%20");
+					sb.append(getStringValue(range.getHigh()));
+					continue;
+				}else if(range.getLow().isLowerUnbounded()){
+					sb.append(columnName);
+					sb.append("%20");
+					sb.append("<");
+					sb.append("%20");
+					sb.append(getStringValue(range.getHigh()));
+					continue;
+				}
+				// filter corresponds to >=, >
+				if(range.getHigh().isUpperUnbounded() && range.getLow().getBound() == Marker.Bound.EXACTLY){
+					sb.append(columnName);
+					sb.append("%20");
+					sb.append(">=");
+					sb.append("%20");
+					sb.append(getStringValue(range.getLow()));
+					continue;
+				}else if(range.getHigh().isUpperUnbounded()){
+					sb.append(columnName);
+					sb.append("%20");
+					sb.append(">");
+					sb.append("%20");
+					sb.append(getStringValue(range.getLow()));
+					continue;
+				}
+				//bounded range filters
+				sb.append(columnName);
+				sb.append("%20");
+				if(range.getLow().getBound() == Marker.Bound.EXACTLY){
+					sb.append(">=");
+				}else{
+					sb.append(">");
+				}
+				sb.append("%20");
+				sb.append(getStringValue(range.getLow()));
+				sb.append("%20");
+				sb.append("&&");
+				
+				sb.append(columnName);
+				sb.append("%20");
+				if(range.getHigh().getBound() == Marker.Bound.EXACTLY){
+					sb.append("<=");
+				}else{
+					sb.append("<");
+				}
+				sb.append(getStringValue(range.getHigh()));
+				sb.append("%20");
+			}
+		
+			if(domainNum != numOfDomains){
+				sb.append("||");
+			}
+			domainNum++;
+		}
+		sb.append(")");
+        return sb.toString();
     }
 }
