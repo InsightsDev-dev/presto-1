@@ -18,9 +18,15 @@
 
 	<dependencies>
 		<dependency>
-			<groupId>metadata</groupId>
+			<groupId>com.mobileum.metadata</groupId>
 			<artifactId>metadata</artifactId>
 			<version>0.0.1-SNAPSHOT</version>
+			<exclusions>
+			<exclusion>
+              <groupId>log4j</groupId>
+              <artifactId>log4j</artifactId>
+            </exclusion>
+            </exclusions>
 		</dependency>
 		
 		<dependency>
