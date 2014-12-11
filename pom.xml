@@ -65,6 +65,7 @@
         <module>presto-hive-cdh4</module>
         <module>presto-hive-cdh5</module>
 		<module>presto-text</module>
+		<module>presto-metadata</module>
         <module>presto-proteum</module>
         <module>presto-example-http</module>
         <module>presto-tpch</module>
@@ -126,6 +127,13 @@
                 <type>zip</type>
             </dependency>
 
+            <dependency>
+				<groupId>com.facebook.presto</groupId>
+				<artifactId>presto-metadata</artifactId>
+				<version>${project.version}</version>
+				<type>zip</type>
+			</dependency>
+			
             <dependency>
                 <groupId>com.facebook.presto</groupId>
                 <artifactId>presto-proteum</artifactId>

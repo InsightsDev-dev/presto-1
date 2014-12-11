@@ -107,4 +107,9 @@
             <unpack />
         </artifact>
      </artifactSet>
+    <artifactSet to="plugin/metadata">
+        <artifact id="${project.groupId}:presto-metadata:zip:${project.version}">
+            <unpack />
+        </artifact>
+     </artifactSet>
 </runtime>

@@ -1,0 +1,66 @@
+{
+    "default": [
+        {
+            "name": "partition_info",
+            "columns": [
+                {
+                    "name": "modelname",
+                    "type": "VARCHAR"
+                },
+                {
+                    "name": "partitionid",
+                    "type": "VARCHAR"
+                }, 
+                {
+                    "name": "no_of_record",
+                    "type": "VARCHAR"
+                },
+                {
+                    "name": "partition_info",
+                    "type": "VARCHAR"
+                },
+                {
+                    "name": "generic_string",
+                    "type": "VARCHAR"
+                }
+            ]
+        },
+        {"name": "card",
+            "columns": [
+                {
+                    "name": "cardinality_col",
+                    "type": "HYPERLOGLOG"
+                }
+                ]
+        },
+        {
+            "name": "partition_metadata",
+            "columns": [
+                {
+                    "name": "modelname",
+                    "type": "VARCHAR"
+                },
+                {
+                    "name": "partitionid",
+                    "type": "VARCHAR"
+                }, 
+                {
+                    "name": "columnname",
+                    "type": "VARCHAR"
+                },
+                {
+                    "name": "min",
+                    "type": "VARCHAR"
+                },
+                {
+                    "name": "max",
+                    "type": "VARCHAR"
+                },
+                {
+                    "name": "cardinality",
+                    "type": "HYPERLOGLOG"
+                }
+            ]
+        }
+    ]
+}
