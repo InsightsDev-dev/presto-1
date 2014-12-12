@@ -12,6 +12,10 @@
                     "type": "VARCHAR"
                 }, 
                 {
+                    "name": "time",
+                    "type": "BIGINT"
+                },
+                {
                     "name": "no_of_record",
                     "type": "VARCHAR"
                 },

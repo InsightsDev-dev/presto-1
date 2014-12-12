@@ -44,7 +44,7 @@ public class MetadataClient {
 	 * SchemaName -> (TableName -> TableMetadata)
 	 */
 	private final Supplier<Map<String, Map<String, MetadataTable>>> schemas;
-	private final static String json = "{\"default\":[{\"name\":\"partition_info\",\"columns\":[{\"name\":\"modelname\",\"type\":\"VARCHAR\"},{\"name\":\"partitionid\",\"type\":\"VARCHAR\"},{\"name\":\"no_of_record\",\"type\":\"VARCHAR\"},{\"name\":\"partition_info\",\"type\":\"VARCHAR\"},{\"name\":\"generic_string\",\"type\":\"VARCHAR\"}]},{\"name\":\"card\",\"columns\":[{\"name\":\"modelname\",\"type\":\"VARCHAR\"}]},{\"name\":\"partition_metadata\",\"columns\":[{\"name\":\"modelname\",\"type\":\"VARCHAR\"},{\"name\":\"partitionid\",\"type\":\"VARCHAR\"},{\"name\":\"columnname\",\"type\":\"VARCHAR\"},{\"name\":\"min\",\"type\":\"VARCHAR\"},{\"name\":\"max\",\"type\":\"VARCHAR\"},{\"name\":\"cardinality\",\"type\":\"HyperLogLog\"}]}]}";
+	private final static String json = "{\"default\":[{\"name\":\"partition_info\",\"columns\":[{\"name\":\"modelname\",\"type\":\"VARCHAR\"},{\"name\":\"partitionid\",\"type\":\"VARCHAR\"},{\"name\": \"time\",\"type\": \"BIGINT\"},  {\"name\":\"no_of_record\",\"type\":\"VARCHAR\"},{\"name\":\"partition_info\",\"type\":\"VARCHAR\"},{\"name\":\"generic_string\",\"type\":\"VARCHAR\"}]},{\"name\":\"card\",\"columns\":[{\"name\":\"modelname\",\"type\":\"VARCHAR\"}]},{\"name\":\"partition_metadata\",\"columns\":[{\"name\":\"modelname\",\"type\":\"VARCHAR\"},{\"name\":\"partitionid\",\"type\":\"VARCHAR\"},{\"name\":\"columnname\",\"type\":\"VARCHAR\"},{\"name\":\"min\",\"type\":\"VARCHAR\"},{\"name\":\"max\",\"type\":\"VARCHAR\"},{\"name\":\"cardinality\",\"type\":\"HyperLogLog\"}]}]}";
 
 	@Inject
 	public MetadataClient(MetadataConfig config,
