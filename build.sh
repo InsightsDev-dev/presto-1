@@ -7,10 +7,7 @@ fi
 
 mvn clean install -DskipTests=true -Dair.check.skip-license=true -Dcheckstyle.skip=true
 
-cp -R presto-server/target/presto-server-0.82 $MOBILIUM_HOME/
-cp -R presto-server/target/etc $MOBILIUM_HOME/presto-server-0.82/
-cp presto-cli/target/presto-cli-0.82-executable.jar $MOBILIUM_HOME/presto-server-0.82/presto
-chmod +x $MOBILIUM_HOME/presto-server-0.82/presto
+
 
 ##temporary fix for copying jars according to profile
 if [ $1 == "-Pdev" ]
@@ -106,6 +103,13 @@ else
         echo "the profile : $1 is not configured"
         exit 10
 fi
+
+cp -R presto-server/target/presto-server-0.82 $MOBILIUM_HOME/
+cp -R presto-server/target/etc $MOBILIUM_HOME/presto-server-0.82/
+cp presto-cli/target/presto-cli-0.82-executable.jar $MOBILIUM_HOME/presto-server-0.82/presto
+chmod +x $MOBILIUM_HOME/presto-server-0.82/presto
+
+
 cd $MOBILIUM_HOME
 rm build-*.tar.gz
 
