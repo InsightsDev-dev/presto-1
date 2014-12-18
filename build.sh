@@ -7,6 +7,10 @@ fi
 
 mvn clean install -DskipTests=true -Dair.check.skip-license=true -Dcheckstyle.skip=true
 
+if [ $? -ne 0 ]
+then 
+        exit 10
+fi
 
 
 ##temporary fix for copying jars according to profile
@@ -101,6 +105,11 @@ cp ~/.m2/repository/commons-beanutils/commons-beanutils/1.7.0/commons-beanutils-
 cp ~/.m2/repository/org/mortbay/jetty/jetty/6.1.26/jetty-6.1.26.jar presto-server/target/presto-server-0.82/plugin/metadata/
 else 
         echo "the profile : $1 is not configured"
+        exit 10
+fi
+
+if [ $? -ne 0 ]
+then 
         exit 10
 fi
 
