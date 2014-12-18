@@ -156,11 +156,9 @@ public class StatementResource
             throws InterruptedException
     {
         assertRequest(!isNullOrEmpty(statement), "SQL statement is empty");
-//		 if(catalog.equalsIgnoreCase("proteum")){
-//            statement = rewriteQuery(statement);
-//        }
         Session session = createSessionForRequest(servletRequest);
-
+        if(session.getCatalog().equals("proteum"))
+            statement = rewriteQuery(statement);
         ExchangeClient exchangeClient = exchangeClientSupplier.get();
         Query query = new Query(session, statement, queryManager, exchangeClient);
         queries.put(query.getQueryId(), query);
