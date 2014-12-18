@@ -41,7 +41,7 @@ public class ProteumClient {
         String baseURL = "http://"+host+":"+port;
         this.baseURL = baseURL;
         try{
-            URL url = new URL(baseURL+"/schemas");
+            URL url = new URL(baseURL+"/list");
             HttpURLConnection connection = (HttpURLConnection)url.openConnection();
             connection.setRequestMethod("GET");
             connection.connect();
@@ -49,64 +49,78 @@ public class ProteumClient {
                     connection.getInputStream()));
             String inputLine;
             while ((inputLine = in.readLine()) != null) {
-                tables.put(inputLine, null);
-                schemas.add(inputLine);
+                addTable(inputLine);
             }
-                        
-            in.close();
-            for(String schema : schemas){
-                url = new URL(baseURL+"/tables/"+schema);
-                connection = (HttpURLConnection)url.openConnection();
-                connection.setRequestMethod("GET");
-                connection.connect();
-                in = new BufferedReader(new InputStreamReader(
-                        connection.getInputStream()));
-                while ((inputLine = in.readLine()) != null) {
-                    String tableName = inputLine;
-                    Map<String, ProteumTable> tempMap = tables.get(schema);
-                    if(tempMap == null){
-                        tempMap = new HashMap<String, ProteumTable>();
-                        tables.put(schema, tempMap);
-                    }
-                    tempMap.put(tableName, null);
-                }
-            }
-            
-            for(String schema : schemas){
-                List<String> tempTables = Lists.newArrayList(tables.get(schema).keySet());
-                for(String tableName : tempTables){
-                    List<ProteumColumn> columns = new ArrayList<ProteumColumn>();
-                    url = new URL(baseURL+"/describe/"+schema+"/"+tableName);
-                    connection = (HttpURLConnection)url.openConnection();
-                    connection.setRequestMethod("GET");
-                    connection.connect();
-                    in = new BufferedReader(new InputStreamReader(
-                            connection.getInputStream()));
-                    while ((inputLine = in.readLine()) != null) {
-                        String[]nameType = inputLine.split(":");
-                        Type type=getTypeFromString(nameType[1]);
-                        columns.add(new ProteumColumn(nameType[0], type));
-                    }
-                    url = new URL(baseURL+"/splits/"+schema+"/"+tableName);
-                    connection = (HttpURLConnection)url.openConnection();
-                    connection.setRequestMethod("GET");
-                    connection.connect();
-                    in = new BufferedReader(new InputStreamReader(
-                            connection.getInputStream()));
-                    String[] splits = in.readLine().split("\\|");
-                    List<URL> urls = new ArrayList<URL>();
-                    for(String split : splits){
-                        urls.add(new URL(baseURL+"/print/"+schema+"/"+tableName+"/"+split));
-                    }
-                    ProteumTable pTable = new ProteumTable(tableName, columns, urls, schema, baseURL,true);
-                    tables.get(schema).put(tableName, pTable);
-                }
-            }
-            
         }
-        catch(Exception e){
-            
-        }
+        catch(Exception e){}
+       
+//        try{
+//            URL url = new URL(baseURL+"/schemas");
+//            HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+//            connection.setRequestMethod("GET");
+//            connection.connect();
+//            BufferedReader in = new BufferedReader(new InputStreamReader(
+//                    connection.getInputStream()));
+//            String inputLine;
+//            while ((inputLine = in.readLine()) != null) {
+//                tables.put(inputLine, null);
+//                schemas.add(inputLine);
+//            }
+//                        
+//            in.close();
+//            for(String schema : schemas){
+//                url = new URL(baseURL+"/tables/"+schema);
+//                connection = (HttpURLConnection)url.openConnection();
+//                connection.setRequestMethod("GET");
+//                connection.connect();
+//                in = new BufferedReader(new InputStreamReader(
+//                        connection.getInputStream()));
+//                while ((inputLine = in.readLine()) != null) {
+//                    String tableName = inputLine;
+//                    Map<String, ProteumTable> tempMap = tables.get(schema);
+//                    if(tempMap == null){
+//                        tempMap = new HashMap<String, ProteumTable>();
+//                        tables.put(schema, tempMap);
+//                    }
+//                    tempMap.put(tableName, null);
+//                }
+//            }
+//            
+//            for(String schema : schemas){
+//                List<String> tempTables = Lists.newArrayList(tables.get(schema).keySet());
+//                for(String tableName : tempTables){
+//                    List<ProteumColumn> columns = new ArrayList<ProteumColumn>();
+//                    url = new URL(baseURL+"/describe/"+schema+"/"+tableName);
+//                    connection = (HttpURLConnection)url.openConnection();
+//                    connection.setRequestMethod("GET");
+//                    connection.connect();
+//                    in = new BufferedReader(new InputStreamReader(
+//                            connection.getInputStream()));
+//                    while ((inputLine = in.readLine()) != null) {
+//                        String[]nameType = inputLine.split(":");
+//                        Type type=getTypeFromString(nameType[1]);
+//                        columns.add(new ProteumColumn(nameType[0], type));
+//                    }
+//                    url = new URL(baseURL+"/splits/"+schema+"/"+tableName);
+//                    connection = (HttpURLConnection)url.openConnection();
+//                    connection.setRequestMethod("GET");
+//                    connection.connect();
+//                    in = new BufferedReader(new InputStreamReader(
+//                            connection.getInputStream()));
+//                    String[] splits = in.readLine().split("\\|");
+//                    List<URL> urls = new ArrayList<URL>();
+//                    for(String split : splits){
+//                        urls.add(new URL(baseURL+"/print/"+schema+"/"+tableName+"/"+split));
+//                    }
+//                    ProteumTable pTable = new ProteumTable(tableName, columns, urls, schema, baseURL,true);
+//                    tables.get(schema).put(tableName, pTable);
+//                }
+//            }
+//            
+//        }
+//        catch(Exception e){
+//            
+//        }
         
     }
     public String getBaseURL(){
@@ -166,6 +180,9 @@ public class ProteumClient {
             urls.add(new URL(baseURL+"/print/"+database+"/"+tableName+"/"+split));
         }
         ProteumTable pTable = new ProteumTable(tableName, columns, urls, schema, baseURL,visible);
+        if(tables.get(database)==null){
+            tables.put(database, new HashMap<String,ProteumTable>());
+        }
         tables.get(database).put(tableName, pTable);
     }
 

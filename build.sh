@@ -129,3 +129,10 @@ then
   else
     tar zcvf build-hdfs2-$timestamp.tar.gz *
 fi
+
+rm -rf presto-server-0.82
+mvn clean install -DskipTests=true -Dair.check.skip-license=true -Dcheckstyle.skip=true
+cp -R presto-server/target/presto-server-0.82 .
+cp -R presto-server/target/etc presto-server-0.82/
+cp presto-cli/target/presto-cli-0.82-executable.jar presto-server-0.82/presto
+chmod +x presto-server-0.82/presto
