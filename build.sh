@@ -1,4 +1,13 @@
 MOBILIUM_HOME=/opt/mobileum
+if [[  -z $2 ]] ; then 
+  echo "Compiling to default directory /opt/mobileum"
+  MOBILIUM_HOME='/opt/mobileum' 
+else
+  echo "using directory $2" 
+  MOBILIUM_HOME=$2 
+fi
+
+
 if [ $1 != "-Pdev" ]  && [ $1 != "-Pprod" ]
 then
         echo "incorrect profile"
@@ -11,6 +20,8 @@ if [ $? -ne 0 ]
 then 
         exit 10
 fi
+
+
 
 
 ##temporary fix for copying jars according to profile
@@ -129,10 +140,3 @@ then
   else
     tar zcvf build-hdfs2-$timestamp.tar.gz *
 fi
-
-rm -rf presto-server-0.82
-mvn clean install -DskipTests=true -Dair.check.skip-license=true -Dcheckstyle.skip=true
-cp -R presto-server/target/presto-server-0.82 .
-cp -R presto-server/target/etc presto-server-0.82/
-cp presto-cli/target/presto-cli-0.82-executable.jar presto-server-0.82/presto
-chmod +x presto-server-0.82/presto
