@@ -71,6 +71,7 @@ public class ProteumTable {
     }
     
     public void updateSources() throws Exception{
+        if(!visible) return;
         URL url = new URL(baseURL+"/splits/"+schema+"/"+name);
         HttpURLConnection connection = (HttpURLConnection)url.openConnection();
         connection.setRequestMethod("GET");

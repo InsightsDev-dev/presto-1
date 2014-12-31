@@ -179,7 +179,7 @@ public class ProteumClient {
         for(String split : splits){
             urls.add(new URL(baseURL+"/print/"+database+"/"+tableName+"/"+split));
         }
-        ProteumTable pTable = new ProteumTable(tableName, columns, urls, schema, baseURL,visible);
+        ProteumTable pTable = new ProteumTable(tableName, columns, urls, database, baseURL,visible);
         if(tables.get(database)==null){
             tables.put(database, new HashMap<String,ProteumTable>());
         }
