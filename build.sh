@@ -114,6 +114,8 @@ cp ~/.m2/repository/org/codehaus/jackson/jackson-jaxrs/1.8.3/jackson-jaxrs-1.8.3
 cp ~/.m2/repository/commons-cli/commons-cli/1.2/commons-cli-1.2.jar presto-server/target/presto-server-0.82/plugin/metadata/
 cp ~/.m2/repository/commons-beanutils/commons-beanutils/1.7.0/commons-beanutils-1.7.0.jar presto-server/target/presto-server-0.82/plugin/metadata/
 cp ~/.m2/repository/org/mortbay/jetty/jetty/6.1.26/jetty-6.1.26.jar presto-server/target/presto-server-0.82/plugin/metadata/
+cp ~/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar presto-server/target/presto-server-0.82/plugin/metadata/
+cp ~/.m2/repository/com/ibm/biginsights/data-compression/ibm-compression/1.0.28/ibm-compression-1.0.28.jar presto-server/target/presto-server-0.82/plugin/metadata/
 else 
         echo "the profile : $1 is not configured"
         exit 10
