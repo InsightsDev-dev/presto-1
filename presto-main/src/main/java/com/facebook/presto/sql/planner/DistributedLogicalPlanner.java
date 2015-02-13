@@ -533,7 +533,8 @@ public class DistributedLogicalPlanner
                                 node.getType(),
                                 left.getRoot(),
                                 new ExchangeNode(idAllocator.getNextId(), right.getId(), right.getRoot().getOutputSymbols()),
-                                node.getCriteria()));
+                                node.getCriteria(),
+                                node.getComparisons()));
                         left.addChild(right.build());
 
                         return left;
@@ -547,7 +548,8 @@ public class DistributedLogicalPlanner
                                 node.getType(),
                                 new ExchangeNode(idAllocator.getNextId(), left.getId(), left.getRoot().getOutputSymbols()),
                                 right.getRoot(),
-                                node.getCriteria()));
+                                node.getCriteria(),
+                                node.getComparisons()));
                         right.addChild(left.build());
 
                         return right;
@@ -556,7 +558,7 @@ public class DistributedLogicalPlanner
                 }
             }
             else {
-                JoinNode join = new JoinNode(node.getId(), node.getType(), left.getRoot(), right.getRoot(), node.getCriteria());
+                JoinNode join = new JoinNode(node.getId(), node.getType(), left.getRoot(), right.getRoot(), node.getCriteria(),node.getComparisons());
                 return createSingleNodePlan(join)
                         .setChildren(Iterables.concat(left.getChildren(), right.getChildren()));
             }

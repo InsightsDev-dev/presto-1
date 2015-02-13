@@ -288,7 +288,10 @@ public class UnaliasSymbolReferences
         {
             PlanNode left = planRewriter.rewrite(node.getLeft(), context);
             PlanNode right = planRewriter.rewrite(node.getRight(), context);
+            if(node.getComparisons()!=null){
+                return new JoinNode(node.getId(), node.getType(), left, right, canonicalizeJoinCriteria(node.getCriteria()),canonicalize(node.getComparisons()));
 
+            }
             return new JoinNode(node.getId(), node.getType(), left, right, canonicalizeJoinCriteria(node.getCriteria()));
         }
 

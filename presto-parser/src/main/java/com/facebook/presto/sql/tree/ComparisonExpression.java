@@ -27,8 +27,15 @@ public class ComparisonExpression
         LESS_THAN_OR_EQUAL("<="),
         GREATER_THAN(">"),
         GREATER_THAN_OR_EQUAL(">="),
-        IS_DISTINCT_FROM("IS DISTINCT FROM");
-
+        IS_DISTINCT_FROM("IS DISTINCT FROM"),
+        LEFT_CONTAINS_RIGHT("@>"),
+        RIGHT_CONTAINS_LEFT("<@"),
+        OVERLAPPING_WITH("&&"),
+        STRICTLY_LEFT("<<"),
+        STRICTLY_RIGHT(">>"),
+        ADJACENT_WITH("-|-"),
+        NOT_RIGHT("&<"),
+        NOT_LEFT("&>");
         private final String value;
 
         Type(String value)

@@ -106,20 +106,41 @@ public class PruneUnreferencedOutputs
         @Override
         public PlanNode rewriteJoin(JoinNode node, Set<Symbol> expectedOutputs, PlanRewriter<Set<Symbol>> planRewriter)
         {
-            Set<Symbol> leftInputs = ImmutableSet.<Symbol>builder()
-                    .addAll(expectedOutputs)
-                    .addAll(Iterables.transform(node.getCriteria(), leftGetter()))
-                    .build();
+            Set<Symbol> leftInputs;
+            Set<Symbol> rightInputs;
+            if (node.getComparasionClauses() != null) {
+                if (node.getComparasionClauses().getLeft() != null && node.getComparasionClauses().getRight() != null) {
+                    leftInputs = ImmutableSet.<Symbol>builder()
+                            .addAll(expectedOutputs)
+                            .addAll(Iterables.transform(node.getCriteria(), leftGetter()))
+                            .addAll(node.getComparasionClauses().getLeft())
+                            .build();
 
-            Set<Symbol> rightInputs = ImmutableSet.<Symbol>builder()
-                    .addAll(expectedOutputs)
-                    .addAll(Iterables.transform(node.getCriteria(), rightGetter()))
-                    .build();
+                    rightInputs = ImmutableSet.<Symbol>builder()
+                            .addAll(expectedOutputs)
+                            .addAll(Iterables.transform(node.getCriteria(), rightGetter()))
+                            .addAll(node.getComparasionClauses().getRight())
+                            .build();
+                }
+                else {
+                    throw new RuntimeException("Should not happen!!!.Error in logic");
+                }
+            }
+            else {
+                leftInputs = ImmutableSet.<Symbol>builder()
+                        .addAll(expectedOutputs)
+                        .addAll(Iterables.transform(node.getCriteria(), leftGetter()))
+                        .build();
+
+                rightInputs = ImmutableSet.<Symbol>builder()
+                        .addAll(expectedOutputs)
+                        .addAll(Iterables.transform(node.getCriteria(), rightGetter()))
+                        .build();
+            }
 
             PlanNode left = planRewriter.rewrite(node.getLeft(), leftInputs);
             PlanNode right = planRewriter.rewrite(node.getRight(), rightInputs);
-
-            return new JoinNode(node.getId(), node.getType(), left, right, node.getCriteria());
+            return new JoinNode(node.getId(), node.getType(), left, right, node.getCriteria(), node.getComparisons());
         }
 
         @Override

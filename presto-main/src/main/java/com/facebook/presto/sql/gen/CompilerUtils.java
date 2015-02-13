@@ -21,14 +21,19 @@ import com.facebook.presto.byteCode.ParameterizedType;
 import com.facebook.presto.byteCode.SmartClassWriter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.Files;
+
 import io.airlift.log.Logger;
+
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.util.CheckClassAdapter;
 import org.objectweb.asm.util.TraceClassVisitor;
 
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.PrintWriter;
@@ -75,6 +80,32 @@ public final class CompilerUtils
     {
         ClassInfoLoader classInfoLoader = ClassInfoLoader.createClassInfoLoader(classDefinitions, classLoader);
 
+        if(true){
+        	BufferedOutputStream fileOutputStream=null;
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            DumpByteCodeVisitor dumpByteCode = new DumpByteCodeVisitor(new PrintStream(out));
+            for (ClassDefinition classDefinition : classDefinitions) {
+                dumpByteCode.visitClass(classDefinition);
+                ByteArrayOutputStream out1 = new ByteArrayOutputStream();
+                DumpByteCodeVisitor dumpByteCode1 = new DumpByteCodeVisitor(new PrintStream(out1));
+                dumpByteCode1.visitClass(classDefinition);
+              
+                fileOutputStream=new BufferedOutputStream(new FileOutputStream(new File("/Users/dilipsingh/debug/"+classDefinition.getName().substring(classDefinition.getName().lastIndexOf("/"), classDefinition.getName().length())+".java")));
+                fileOutputStream.write(new String(out1.toByteArray()).getBytes(StandardCharsets.UTF_8));    
+                if(fileOutputStream!=null)
+        			try {
+        				fileOutputStream.close();
+        			} catch (IOException e) {
+        				// TODO Auto-generated catch block
+        				e.printStackTrace();
+        			}
+                
+            }
+        } catch (Exception e) {
+					e.printStackTrace();
+        }
+        }
         if (DUMP_BYTE_CODE_TREE) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             DumpByteCodeVisitor dumpByteCode = new DumpByteCodeVisitor(new PrintStream(out));
@@ -96,7 +127,7 @@ public final class CompilerUtils
             byteCodes.put(classDefinition.getType().getJavaClassName(), byteCode);
         }
 
-        String dumpClassPath = DUMP_CLASS_FILES_TO.get();
+        String dumpClassPath = "/Users/dilipsingh/debug/bytecode";DUMP_CLASS_FILES_TO.get();
         if (dumpClassPath != null) {
             for (Map.Entry<String, byte[]> entry : byteCodes.entrySet()) {
                 File file = new File(dumpClassPath, ParameterizedType.typeFromJavaClassName(entry.getKey()).getClassName() + ".class");

@@ -481,9 +481,9 @@ nullOrdering
     ;
 
 cmpOp
-    : EQ | NEQ | LT | LTE | GT | GTE
-    ;
-
+    : EQ | NEQ | LT | LTE | GT | GTE | LCR | RCL | OW | SL | SR | AW | NR | NL 
+    ;	
+	
 subquery
     : '(' query ')' -> query
     ;
@@ -905,7 +905,15 @@ LT  : '<';
 LTE : '<=';
 GT  : '>';
 GTE : '>=';
-
+LCR : '@>';
+RCL : '<@';
+OW  : '&&';
+SL  : '<<';
+SR  : '>>';
+AW  : '-|-';
+NR  : '&<';
+NL  : '&>';
+	
 STRING
     : '\'' ( ~'\'' | '\'\'' )* '\''
         { setText(getText().substring(1, getText().length() - 1).replace("''", "'")); }

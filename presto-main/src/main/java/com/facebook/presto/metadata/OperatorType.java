@@ -130,6 +130,71 @@ public enum OperatorType
                     validateComparisonOperatorSignature(this, returnType, argumentTypes, 2);
                 }
             },
+     LEFT_CONTAINS_RIGHT("@>")
+   			{
+            	@Override
+                void validateSignature(TypeSignature returnType, List<TypeSignature> argumentTypes)
+                {
+                    validateComparisonOperatorSignature(this, returnType, argumentTypes, 2);
+                }
+            	
+            },
+    RIGHT_CONTAINS_LEFT("<@")
+            {
+                @Override
+                void validateSignature(TypeSignature returnType, List<TypeSignature> argumentTypes)
+                {
+                    validateComparisonOperatorSignature(this, returnType, argumentTypes, 2);
+                }
+            },
+    OVERLAPPING_WITH("&&")
+            {
+                @Override
+                void validateSignature(TypeSignature returnType, List<TypeSignature> argumentTypes)
+                {
+                    validateComparisonOperatorSignature(this, returnType, argumentTypes, 2);
+                }
+            },
+     STRICTLY_LEFT("<<")
+             {
+                @Override
+                void validateSignature(TypeSignature returnType, List<TypeSignature> argumentTypes)
+                {
+                    validateComparisonOperatorSignature(this, returnType, argumentTypes, 2);
+                }
+            },
+     STRICTLY_RIGHT(">>")
+             {
+                @Override
+                void validateSignature(TypeSignature returnType, List<TypeSignature> argumentTypes)
+                {
+                    validateComparisonOperatorSignature(this, returnType, argumentTypes, 2);
+                }
+            },
+     ADJACENT_WITH("-|-")
+             {
+                @Override
+                void validateSignature(TypeSignature returnType, List<TypeSignature> argumentTypes)
+                {
+                    validateComparisonOperatorSignature(this, returnType, argumentTypes, 2);
+                }
+            },
+     NOT_RIGHT("&<")
+             {
+                @Override
+                void validateSignature(TypeSignature returnType, List<TypeSignature> argumentTypes)
+                {
+                    validateComparisonOperatorSignature(this, returnType, argumentTypes, 2);
+                }
+            },
+     NOT_LEFT("&>")
+             {
+                @Override
+                void validateSignature(TypeSignature returnType, List<TypeSignature> argumentTypes)
+                {
+                    validateComparisonOperatorSignature(this, returnType, argumentTypes, 2);
+                }
+            },
 
     BETWEEN("BETWEEN")
             {

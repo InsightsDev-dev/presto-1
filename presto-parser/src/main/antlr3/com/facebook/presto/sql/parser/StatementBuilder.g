@@ -442,9 +442,18 @@ comparisonType returns [ComparisonExpression.Type value]
     | LTE                   { $value = ComparisonExpression.Type.LESS_THAN_OR_EQUAL; }
     | GT                    { $value = ComparisonExpression.Type.GREATER_THAN; }
     | GTE                   { $value = ComparisonExpression.Type.GREATER_THAN_OR_EQUAL; }
+    | LCR                   { $value = ComparisonExpression.Type.LEFT_CONTAINS_RIGHT;}
+    | RCL					{ $value = ComparisonExpression.Type.RIGHT_CONTAINS_LEFT;}
+    | OW					{ $value = ComparisonExpression.Type.OVERLAPPING_WITH;}
+    | SL					{ $value = ComparisonExpression.Type.STRICTLY_LEFT;}
+    | SR					{ $value = ComparisonExpression.Type.STRICTLY_RIGHT;}
+    | AW					{ $value = ComparisonExpression.Type.ADJACENT_WITH;}
+    | NR					{ $value = ComparisonExpression.Type.NOT_RIGHT;}
+    | NL 					{ $value = ComparisonExpression.Type.NOT_LEFT;}
     | IS_DISTINCT_FROM      { $value = ComparisonExpression.Type.IS_DISTINCT_FROM; }
     ;
-
+	
+	
 intervalValue returns [IntervalLiteral value]
     : ^(INTERVAL v=string g=intervalSign s=intervalField e=intervalField? ) { $value = new IntervalLiteral($v.value, $g.value, $s.value, $e.value); }
     ;

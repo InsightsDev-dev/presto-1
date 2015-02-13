@@ -13,16 +13,23 @@
  */
 package com.facebook.presto.sql.planner.plan;
 
+import com.facebook.presto.sql.ExpressionUtils;
 import com.facebook.presto.sql.planner.Symbol;
+import com.facebook.presto.sql.tree.BooleanLiteral;
+import com.facebook.presto.sql.tree.ComparisonExpression;
+import com.facebook.presto.sql.tree.Expression;
 import com.facebook.presto.sql.tree.Join;
+import com.facebook.presto.sql.tree.QualifiedNameReference;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -35,13 +42,13 @@ public class JoinNode
     private final PlanNode left;
     private final PlanNode right;
     private final List<EquiJoinClause> criteria;
+    private Expression comparisons;
 
-    @JsonCreator
-    public JoinNode(@JsonProperty("id") PlanNodeId id,
-            @JsonProperty("type") Type type,
-            @JsonProperty("left") PlanNode left,
-            @JsonProperty("right") PlanNode right,
-            @JsonProperty("criteria") List<EquiJoinClause> criteria)
+    public JoinNode( PlanNodeId id,
+             Type type,
+             PlanNode left,
+             PlanNode right,
+             List<EquiJoinClause> criteria)
     {
         super(id);
 
@@ -54,6 +61,19 @@ public class JoinNode
         this.left = left;
         this.right = right;
         this.criteria = ImmutableList.copyOf(criteria);
+    }
+    
+    
+	@JsonCreator
+    public JoinNode(@JsonProperty("id") PlanNodeId id,
+            @JsonProperty("type") Type type,
+            @JsonProperty("left") PlanNode left,
+            @JsonProperty("right") PlanNode right,
+            @JsonProperty("criteria") List<EquiJoinClause> criteria,
+            @JsonProperty("comparisons") @Nullable Expression comparisons)
+    {
+        this(id, type, left, right, criteria);
+        this.comparisons=comparisons;
     }
 
     public enum Type
@@ -117,7 +137,32 @@ public class JoinNode
     {
         return criteria;
     }
-
+    
+    public ComparisonClause getComparasionClauses()
+    {
+        if (comparisons != null) {
+            if (!(comparisons instanceof BooleanLiteral)) {
+                return new ComparisonClause(comparisons);
+            }
+            else {
+                if (BooleanLiteral.TRUE_LITERAL.equals((BooleanLiteral) comparisons)) {
+                    return null;
+                }
+                else {
+                    throw new RuntimeException("Should not happen.Wrong Logic");
+                }
+            }
+        }
+        else {
+            return null;
+        }
+    }
+    
+    @JsonProperty("comparisons")
+    public Expression getComparisons() {
+		return comparisons;
+	}
+    
     @Override
     public List<PlanNode> getSources()
     {
@@ -182,6 +227,63 @@ public class JoinNode
             {
                 @Override
                 public Symbol apply(EquiJoinClause input)
+                {
+                    return input.getRight();
+                }
+            };
+        }
+    }
+    
+    public static class ComparisonClause
+    {
+        private List<Symbol> left=new ArrayList<Symbol>();
+        private List<Symbol> right=new ArrayList<Symbol>();
+        private List<ComparisonExpression.Type> types=new ArrayList<ComparisonExpression.Type>();
+        public ComparisonClause(Expression e)
+        {
+            for (Expression conjunct : ExpressionUtils.extractConjuncts((Expression) e)) {
+        		ComparisonExpression comparisonExpression=(ComparisonExpression)conjunct;
+        		QualifiedNameReference q=((QualifiedNameReference)comparisonExpression.getLeft());
+        		left.add(new Symbol(((QualifiedNameReference)comparisonExpression.getLeft()).toString().replace("\"", "")));
+        		right.add(new Symbol(((QualifiedNameReference)comparisonExpression.getRight()).toString().replace("\"", "")));
+        		types.add(comparisonExpression.getType());
+        	}		
+        }
+        
+
+        public List<Symbol> getLeft()
+        {
+            return left;
+        }
+
+        public List<Symbol> getRight()
+        {
+            return right;
+        }
+        
+        public List<ComparisonExpression.Type> getTypes()
+        {
+            return types;
+        }
+
+        public static Function<ComparisonClause, List<Symbol>> leftGetter()
+        {
+            return new Function<ComparisonClause, List<Symbol>>()
+            {
+                @Override
+                public List<Symbol> apply(ComparisonClause input)
+                {
+                    return input.getLeft();
+                }
+            };
+        }
+
+        public static Function<ComparisonClause, List<Symbol>> rightGetter()
+        {
+            return new Function<ComparisonClause, List<Symbol>>()
+            {
+                @Override
+                public List<Symbol> apply(ComparisonClause input)
                 {
                     return input.getRight();
                 }
