@@ -26,7 +26,11 @@ import java.util.List;
 import static com.facebook.presto.util.MoreFutures.tryGetUnchecked;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-
+/**
+ * 
+ * @author dilip kasana
+ * @Date  13-Feb-2015
+ */
 public class CustomizedLookupJoinOperator
         implements Operator, Closeable
 {

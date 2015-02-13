@@ -15,16 +15,22 @@ package com.facebook.presto.connector.proteum;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import javax.inject.Inject;
 
+import com.facebook.presto.metadata.FunctionFactory;
 import com.facebook.presto.spi.ConnectorFactory;
 import com.facebook.presto.spi.Plugin;
+import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.spi.type.TypeManager;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.mobileum.range.presto.Int4RangeType;
+import com.mobileum.range.presto.TSRangeType;
+import com.mobileum.range.presto.TSTZRangeType;
 
 public class ProteumPlugin implements Plugin
 {
@@ -52,6 +58,16 @@ public class ProteumPlugin implements Plugin
     {
         if (type == ConnectorFactory.class) {
             return ImmutableList.of(type.cast(new ProteumConnectorFactory(typeManager, getOptionalConfig())));
+        }else if (type == FunctionFactory.class) {
+            return ImmutableList.of(type.cast(new ProteumFunctionFactory(
+                    this.typeManager)));
+        }
+        else if (type == Type.class) {
+            List<T> types = new ArrayList<T>();
+            types.add(type.cast(Int4RangeType.INT_4_RANGE_TYPE));
+            types.add(type.cast(TSTZRangeType.TSTZ_RANGE_TYPE));
+            types.add(type.cast(TSRangeType.TS_RANGE_TYPE));
+            return types;
         }
         return ImmutableList.of();
     }

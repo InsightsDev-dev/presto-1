@@ -25,7 +25,11 @@ import java.util.List;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-
+/**
+ * 
+ * @author dilip kasana
+ * @Date  13-Feb-2015
+ */
 @ThreadSafe
 public class CustomizedHashBuilderOperator implements Operator {
 	public static class CustomizedHashBuilderOperatorFactory implements
