@@ -21,7 +21,11 @@ import com.google.common.collect.ImmutableList;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.checkState;
-
+/**
+ * 
+ * @author dilip kasana
+ * @Date  13-Feb-2015
+ */
 public class CustomizedLookupJoinOperatorFactory
         implements OperatorFactory
 {

@@ -26,7 +26,11 @@ import java.util.List;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-
+/**
+ * 
+ * @author dilip kasana
+ * @Date  13-Feb-2015
+ */
 public class CustomizedSimplePagesHashStrategy
         implements PagesHashStrategy
 {
