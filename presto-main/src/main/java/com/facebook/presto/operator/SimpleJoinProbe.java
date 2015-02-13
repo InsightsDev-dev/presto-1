@@ -18,6 +18,7 @@ import com.facebook.presto.spi.PageBuilder;
 import com.facebook.presto.spi.block.Block;
 import com.facebook.presto.spi.type.Type;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -64,9 +65,10 @@ public class SimpleJoinProbe
         this.positionCount = page.getPositionCount();
         this.blocks = new Block[page.getChannelCount()];
         this.probeBlocks = new Block[probeJoinChannels.size()];
-
+        this.blockList=new ArrayList<Block>();
         for (int i = 0; i < page.getChannelCount(); i++) {
             blocks[i] = page.getBlock(i);
+            blockList.add(blocks[i]);
         }
 
         for (int i = 0; i < probeJoinChannels.size(); i++) {
@@ -121,4 +123,11 @@ public class SimpleJoinProbe
         }
         return false;
     }
+    List<Block> blockList;
+	public List<Block> getBlocks() {
+		return blockList;
+	}
+	public int getPosition() {
+		return position;
+	}
 }

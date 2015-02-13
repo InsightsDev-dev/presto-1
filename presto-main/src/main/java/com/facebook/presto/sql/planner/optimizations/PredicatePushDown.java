@@ -368,7 +368,7 @@ public class PredicatePushDown
                     rightSource = new ProjectNode(idAllocator.getNextId(), rightSource, rightProjections.build());
                     criteria = builder.build();
                 }
-                output = new JoinNode(node.getId(), node.getType(), leftSource, rightSource, criteria, node.getLeftHashSymbol(), node.getRightHashSymbol());
+                output = new JoinNode(node.getId(), node.getType(), leftSource, rightSource, criteria, node.getLeftHashSymbol(), node.getRightHashSymbol(),node.getComparisons());
             }
             if (!postJoinPredicate.equals(BooleanLiteral.TRUE_LITERAL)) {
                 output = new FilterNode(idAllocator.getNextId(), output, postJoinPredicate);
@@ -642,7 +642,7 @@ public class PredicatePushDown
                     node.getType() == JoinNode.Type.RIGHT && !canConvertOuterToInner(node.getLeft().getOutputSymbols(), inheritedPredicate)) {
                 return node;
             }
-            return new JoinNode(node.getId(), JoinNode.Type.INNER, node.getLeft(), node.getRight(), node.getCriteria(), node.getLeftHashSymbol(), node.getRightHashSymbol());
+            return new JoinNode(node.getId(), JoinNode.Type.INNER, node.getLeft(), node.getRight(), node.getCriteria(), node.getLeftHashSymbol(), node.getRightHashSymbol(),node.getComparisons());
         }
 
         private boolean canConvertOuterToInner(List<Symbol> innerSymbolsForOuterJoin, Expression inheritedPredicate)

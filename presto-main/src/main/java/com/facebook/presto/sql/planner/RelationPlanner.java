@@ -230,6 +230,7 @@ class RelationPlanner
 
         ImmutableList.Builder<JoinNode.EquiJoinClause> equiClauses = ImmutableList.builder();
         Expression postInnerJoinCriteria = new BooleanLiteral("TRUE");
+        Expression joinComparasions = new BooleanLiteral("TRUE");
         if (node.getType() != Join.Type.CROSS && node.getType() != Join.Type.IMPLICIT) {
             Expression criteria = analysis.getJoinCriteria(node);
 
@@ -245,9 +246,9 @@ class RelationPlanner
 
                 ComparisonExpression comparison = (ComparisonExpression) conjunct;
                 ComparisonExpression.Type comparisonType = comparison.getType();
-                if (comparison.getType() != EQUAL && node.getType() != INNER) {
-                    throw new SemanticException(NOT_SUPPORTED, node, "Non-equi joins only supported for inner join: %s", conjunct);
-                }
+//                if (comparison.getType() != EQUAL && node.getType() != INNER) {
+//                    throw new SemanticException(NOT_SUPPORTED, node, "Non-equi joins only supported for inner join: %s", conjunct);
+//                }
                 Set<QualifiedName> firstDependencies = TupleAnalyzer.DependencyExtractor.extract(comparison.getLeft());
                 Set<QualifiedName> secondDependencies = TupleAnalyzer.DependencyExtractor.extract(comparison.getRight());
 
@@ -284,17 +285,27 @@ class RelationPlanner
             rightPlanBuilder = appendProjections(rightPlanBuilder, rightExpressions);
 
             List<Expression> postInnerJoinComparisons = new ArrayList<>();
+            List<Expression> joinComparisons = new ArrayList<>();
+            if(!comparisonTypes.contains(EQUAL)){
+            	comparisonTypes.add(EQUAL);
+            	leftExpressions.add(new LongLiteral("0"));
+            	rightExpressions.add(new LongLiteral("0"));
+            }
             for (int i = 0; i < comparisonTypes.size(); i++) {
                 Symbol leftSymbol = leftPlanBuilder.translate(leftExpressions.get(i));
                 Symbol rightSymbol = rightPlanBuilder.translate(rightExpressions.get(i));
-
-                equiClauses.add(new JoinNode.EquiJoinClause(leftSymbol, rightSymbol));
-
                 Expression leftExpression = leftPlanBuilder.rewrite(leftExpressions.get(i));
                 Expression rightExpression = rightPlanBuilder.rewrite(rightExpressions.get(i));
+                if(comparisonTypes.get(i) == EQUAL) {
+                	equiClauses.add(new JoinNode.EquiJoinClause(leftSymbol, rightSymbol));
+                }
+                else {
+                	joinComparisons.add(new ComparisonExpression(comparisonTypes.get(i), leftExpression, rightExpression));
+                }
                 postInnerJoinComparisons.add(new ComparisonExpression(comparisonTypes.get(i), leftExpression, rightExpression));
             }
             postInnerJoinCriteria = ExpressionUtils.and(postInnerJoinComparisons);
+           if(joinComparisons.size()>0) joinComparasions = ExpressionUtils.and(joinComparisons);
         }
 
         PlanNode root;

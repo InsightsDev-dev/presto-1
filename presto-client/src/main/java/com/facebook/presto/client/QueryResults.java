@@ -272,6 +272,13 @@ public class QueryResults
             case DATE:
             case INTERVAL_YEAR_TO_MONTH:
             case INTERVAL_DAY_TO_SECOND:
+            case "drange":
+            case "int4range":
+            case "int8range":
+            case "numrange":
+            case "tsrange":
+            case "tstzrange":
+            case "daterange":
                 return String.class.cast(value);
             default:
                 // for now we assume that only the explicit types above are passed

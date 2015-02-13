@@ -65,6 +65,13 @@ import static com.facebook.presto.sql.tree.ComparisonExpression.Type.GREATER_THA
 import static com.facebook.presto.sql.tree.ComparisonExpression.Type.LESS_THAN;
 import static com.facebook.presto.sql.tree.ComparisonExpression.Type.LESS_THAN_OR_EQUAL;
 import static com.facebook.presto.sql.tree.ComparisonExpression.Type.NOT_EQUAL;
+import static com.facebook.presto.sql.tree.ComparisonExpression.Type.LEFT_CONTAINS_RIGHT;
+import static com.facebook.presto.sql.tree.ComparisonExpression.Type.RIGHT_CONTAINS_LEFT;
+import static com.facebook.presto.sql.tree.ComparisonExpression.Type.OVERLAPPING_WITH;
+import static com.facebook.presto.sql.tree.ComparisonExpression.Type.STRICTLY_LEFT;
+import static com.facebook.presto.sql.tree.ComparisonExpression.Type.STRICTLY_RIGHT;
+import static com.facebook.presto.sql.tree.ComparisonExpression.Type.NOT_RIGHT;
+import static com.facebook.presto.sql.tree.ComparisonExpression.Type.NOT_LEFT;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
@@ -79,8 +86,7 @@ public final class DomainTranslator
     private static final String TIMESTAMP_LITERAL = getMagicLiteralFunctionSignature(TIMESTAMP).getName();
 
     private DomainTranslator()
-    {
-    }
+    {}
 
     public static Expression toPredicate(TupleDomain<Symbol> tupleDomain, Map<Symbol, Type> symbolTypes)
     {
@@ -313,6 +319,7 @@ public final class DomainTranslator
                 node = normalizeSimpleComparison(node);
             }
             else {
+            if (!isSimpleComparison(node) || containsComplexType(node.getType())) {
                 return super.visitComparisonExpression(node, complement);
             }
 
@@ -332,7 +339,24 @@ public final class DomainTranslator
             return createComparisonExtractionResult(node.getType(), symbol, columnType, objectToComparable(value), complement);
         }
 
-        private ExtractionResult createComparisonExtractionResult(ComparisonExpression.Type comparisonType, Symbol column, Type columnType, Comparable<?> value, boolean complement)
+        private static boolean containsComplexType(com.facebook.presto.sql.tree.ComparisonExpression.Type type)
+        {
+            switch (type) {
+                case LEFT_CONTAINS_RIGHT:
+                case RIGHT_CONTAINS_LEFT:
+                //case OVERLAPPING_WITH:
+                case STRICTLY_LEFT:
+                case STRICTLY_RIGHT:
+                //case ADJACENT_WITH:
+                case NOT_RIGHT:
+                case NOT_LEFT:
+                   return true;
+                default:
+                    return false;
+            }
+        }
+
+        private ExtractionResult createComparisonExtractionResult(ComparisonExpression.Type comparisonType, ColumnHandle columnHandle, Type columnType, Comparable<?> value, boolean complement)
         {
             if (value == null) {
                 switch (comparisonType) {

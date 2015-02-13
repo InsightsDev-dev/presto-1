@@ -378,4 +378,18 @@ public class PagesIndex
                 .add("estimatedSize", estimatedSize)
                 .toString();
     }
+    
+    public LookupSource createCustomizedLookupSource(List<Integer> joinChannels)
+    {
+        PagesHashStrategy hashStrategy = new CustomizedSimplePagesHashStrategy(
+                types,
+                ImmutableList.<List<Block>>copyOf(channels),
+                joinChannels);
+
+        ImmutableList.Builder<Type> hashTypes = ImmutableList.builder();
+        for (Integer channel : joinChannels) {
+            hashTypes.add(types.get(channel));
+        }
+        return new CustomizedInMemoryJoinHash(valueAddresses, hashTypes.build(), hashStrategy, operatorContext);
+    }
 }

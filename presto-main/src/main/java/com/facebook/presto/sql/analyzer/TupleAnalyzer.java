@@ -492,6 +492,27 @@ public class TupleAnalyzer
             analyzer.analyze((Expression) optimizedExpression, output, context);
             analysis.addCoercions(analyzer.getExpressionCoercions());
 
+//            if(!comparisonTypes.contains(EQUAL)){
+//            	comparisonTypes.add(EQUAL);
+//            	leftExpressions.add(new LongLiteral("0"));
+//            	rightExpressions.add(new LongLiteral("0"));
+//            }
+            boolean addOneEquiJoinCondition=true;
+            for (Expression conjunct : ExpressionUtils.extractConjuncts((Expression) optimizedExpression)) {
+                if (!(conjunct instanceof ComparisonExpression)) {
+                    throw new SemanticException(NOT_SUPPORTED, node, "Non-equi joins not supported: %s", conjunct);
+                }else{
+                	ComparisonExpression comparisonExpression=(ComparisonExpression)conjunct;
+                	if(comparisonExpression.getType()==EQUAL){
+                		addOneEquiJoinCondition=false;
+                	}
+                }
+
+            }
+            if(addOneEquiJoinCondition){
+            	Expression expression2=(Expression) optimizedExpression;
+            	optimizedExpression=ExpressionUtils.and(new ComparisonExpression(EQUAL, new LongLiteral("0"), new LongLiteral("0")),expression2 );
+            }
             for (Expression conjunct : ExpressionUtils.extractConjuncts((Expression) optimizedExpression)) {
                 if (!(conjunct instanceof ComparisonExpression)) {
                     throw new SemanticException(NOT_SUPPORTED, node, "Non-equi joins not supported: %s", conjunct);
