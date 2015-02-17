@@ -31,7 +31,6 @@ public abstract class Range<T extends Comparable<T>>
 
     //Not part of searalization
     protected boolean isPoint;//Unused
-    private int pointer = 0;
 
     public Range(RangeBound<T> lower, RangeBound<T> upper, byte flags)
     {
@@ -723,18 +722,79 @@ public abstract class Range<T extends Comparable<T>>
             }
         }
     }
+    
+    public Range<T> parse(String range,ConnectorSession session){
+        if (range == null) {
+            throw new RuntimeException();
+        }
+        else if (range.isEmpty()) {
+            throw new RuntimeException();
+        }
+        else {
+            range = range.trim();
+            byte flags = 0;
+            if (range.equalsIgnoreCase(RANGE_EMPTY_LITERAL)) {
+                flags = RANGE_EMPTY;
+//                flags |= RANGE_LB_NULL;//not used
+//                flags |= RANGE_UB_NULL;//not used
+                //Todo remove cast
+                return getEmptyRange();
+            }
+            else {
+                if (range.startsWith("[")) {
+                    flags |= RANGE_LB_INC;
+                }
+                else if (range.startsWith("(")) {
 
-    public void increasePointer(int readlength)
-    {
-        pointer = pointer + readlength;
+                }
+                else {
+                    throw new RuntimeException("Not starts with either [ or (");
+                }
+                String arr[] = range.split(",");
+                if (arr.length != 2) {
+                    throw new RuntimeException("invalid comma position");
+                }
+                else {
+                    String left = arr[0];
+                    String right = arr[1];
+                    left = left.substring(1, left.length());
+                    if (right.endsWith("]")) {
+                        flags |= RANGE_UB_INC;
+                    }
+                    else if (right.endsWith(")")) {
+
+                    }
+                    else {
+                        throw new RuntimeException("Not starts with either [ or (");
+                    }
+                    right = right.substring(0, right.length() - 1);
+                    T leftValue = null;
+                    T rightValue = null;
+                    if (left.isEmpty()) {
+                        flags |= RANGE_LB_INF;
+                    }
+                    else {
+                        leftValue = parseValue(left,session);
+                    }
+                    if (right.isEmpty()) {
+                        flags |= RANGE_UB_INF;
+                    }
+                    else {
+                        rightValue = parseValue(right,session);
+                    }
+                    return makeRange(leftValue, rightValue, flags);
+                }
+            }
+        }
     }
+
 
     @Override
     public Range<T> parse(Slice range)
     {
-        pointer = 0;
+        Pointer pointer = new Pointer(0);
         byte flags = range.getByte(0);
-        increasePointer(1);
+        pointer.increment(1);
         if (RangeUtils.isEmpty(flags)) {
             //Todo : Remove Cast
             return getEmptyRange();
@@ -854,9 +914,12 @@ public abstract class Range<T extends Comparable<T>>
 
     @Override
     public abstract T parseValue(String value);
+    
+    @Override
+    public abstract T parseValue(String value,ConnectorSession session);
 
     @Override
-    public abstract T parseValue(Slice value, int index);
+    public abstract T parseValue(Slice value, Pointer index);
 
     @Override
     public abstract Slice getValueAsSlice(T value);

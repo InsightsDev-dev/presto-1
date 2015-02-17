@@ -12,15 +12,37 @@ public interface InternalRangeSerializer<T extends Comparable<T>>
         extends RangeSerializer<T>
 {
     public T parseValue(String value);
+    
+    public T parseValue(String value,ConnectorSession session);
 
     public String getValueAsString(T value);
 
     public String getValueAsString(ConnectorSession session, T value);
 
-    public T parseValue(Slice value, int index);
+    public T parseValue(Slice value, Pointer index);
 
     public Slice getValueAsSlice(T value);
 
     //all uses
     public Range<T> custructRange(RangeBound<T> lower, RangeBound<T> upper, byte flag);
+    class Pointer
+    {
+    	int pointer;
+
+		public Pointer(int pointer) 
+		{
+			this.pointer = pointer;
+		}
+
+		public int getPointer() 
+		{
+			return pointer;
+		}
+
+		public void increment(int pointer) 
+		{
+			this.pointer += pointer;
+		}
+    	
+    }
 }

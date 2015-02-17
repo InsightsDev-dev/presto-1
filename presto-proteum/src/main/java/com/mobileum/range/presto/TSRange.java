@@ -39,6 +39,11 @@ public class TSRange
         return (TimeStampRange) rangeSerializer.parse(str.substring(0, 1) + new TimeStamp(min) + "," + new TimeStamp(max) + str.substring(1));
     }
 
+    //parse from utc time.not handles local time with session, be careful.
+	public static TimeStampRange createRange(String timeRange) 
+	{
+		return (TimeStampRange) rangeSerializer.parse(timeRange);
+	}
     public static Slice serialize(Range<TimeStamp> range)
     {
         Slice s = range.getRangeAsSlice();

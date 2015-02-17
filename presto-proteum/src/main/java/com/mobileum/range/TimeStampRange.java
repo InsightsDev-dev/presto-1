@@ -1,7 +1,6 @@
 package com.mobileum.range;
 
 import com.facebook.presto.spi.ConnectorSession;
-import com.facebook.presto.spi.type.TimeZoneKey;
 
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
@@ -45,10 +44,16 @@ public class TimeStampRange
     }
 
     @Override
-    public TimeStamp parseValue(Slice value, int index)
+    public TimeStamp parseValue(String value,ConnectorSession session)
     {
-        increasePointer(TimeStamp.SIZE / Byte.SIZE);
-        return new TimeStamp(value.getLong(index));
+        return TimeStamp.parseLocalTime(session.getTimeZoneKey(), value);
+    }
+    @Override
+    public TimeStamp parseValue(Slice value, Pointer index)
+    {      
+    	TimeStamp ret=new TimeStamp(value.getLong(index.getPointer()));
+        index.increment(TimeStamp.SIZE / Byte.SIZE);
+        return ret;
     }
 
     @Override

@@ -48,6 +48,7 @@ public class TSRangeType
         if (d == null) {
             return null;
         }
+        //String str = d.getRangeAsString();
         String str = d.getRangeAsString(session);
         return str;
     }

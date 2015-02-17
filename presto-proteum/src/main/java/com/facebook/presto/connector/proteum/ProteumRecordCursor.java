@@ -41,154 +41,154 @@ import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
 import com.google.common.io.CountingInputStream;
 import com.google.common.io.InputSupplier;
+import com.mobileum.range.TimeStamp;
+import com.mobileum.range.TimeStampRange;
+import com.mobileum.range.presto.TSRange;
+import com.mobileum.range.presto.TSRangeType;
 
-public class ProteumRecordCursor implements RecordCursor
-{
-    private static final Splitter LINE_SPLITTER = Splitter.on(";").trimResults();
+public class ProteumRecordCursor implements RecordCursor {
+	private static final Splitter LINE_SPLITTER = Splitter.on(";")
+			.trimResults();
 
-    private final List<ProteumColumnHandle> columnHandles;
-    private final int[] fieldToColumnIndex;
+	private final List<ProteumColumnHandle> columnHandles;
+	private final int[] fieldToColumnIndex;
 
-    private final Iterator<String> lines;
-    private final long totalBytes;
+	private final Iterator<String> lines;
+	private final long totalBytes;
 
-    private List<String> fields;
+	private List<String> fields;
 
-    public ProteumRecordCursor(List<ProteumColumnHandle> columnHandles, URL url, List<ProteumColumnFilter> filters)
-    {
-        this.columnHandles = columnHandles;
+	public ProteumRecordCursor(List<ProteumColumnHandle> columnHandles,
+			URL url, List<ProteumColumnFilter> filters) {
+		this.columnHandles = columnHandles;
 
-        fieldToColumnIndex = new int[columnHandles.size()];
-        for (int i = 0; i < columnHandles.size(); i++) {
-            fieldToColumnIndex[i] = i;
-        }
-        try{
-            String path = url.toString()+"?";
-            path+=buildColumnURL(columnHandles)+":";
-            path+=buildFilterURL(filters);
-            url = new URL(path);
-            HttpURLConnection connection = (HttpURLConnection)url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.connect();
-            BufferedReader in = new BufferedReader(new InputStreamReader(
-                    connection.getInputStream()));
-            String inputLine;
-            List<String> tempLines = new ArrayList<String>();
-            int length = 0;
-            while ((inputLine = in.readLine()) != null) {
-                tempLines.add(inputLine);
-                length+=inputLine.length();
-            }
-            lines = tempLines.iterator();
-            totalBytes = length;
-        }
-        catch(Exception e){
-            throw new RuntimeException(e);
-        }
-        
-    }
-    
-    private String buildColumnURL(List<ProteumColumnHandle> columns){
-        List<String> columnsName = new ArrayList<String>();
-        for(ProteumColumnHandle column : columns) columnsName.add(column.getColumnName());
-        return "columns={"+Joiner.on(",").join(columnsName)+"}";
-    }
-    
-    private String buildFilterURL(List<ProteumColumnFilter> filters){
-        
-        
-        
-        return "filters={"+Joiner.on("&&").join(filters)+"}";
-    }
+		fieldToColumnIndex = new int[columnHandles.size()];
+		for (int i = 0; i < columnHandles.size(); i++) {
+			fieldToColumnIndex[i] = i;
+		}
+		try {
+			String path = url.toString() + "?";
+			path += buildColumnURL(columnHandles) + ":";
+			path += buildFilterURL(filters);
+			url = new URL(path);
+			HttpURLConnection connection = (HttpURLConnection) url
+					.openConnection();
+			connection.setRequestMethod("GET");
+			connection.connect();
+			BufferedReader in = new BufferedReader(new InputStreamReader(
+					connection.getInputStream()));
+			String inputLine;
+			List<String> tempLines = new ArrayList<String>();
+			int length = 0;
+			while ((inputLine = in.readLine()) != null) {
+				tempLines.add(inputLine);
+				length += inputLine.length();
+			}
+			lines = tempLines.iterator();
+			totalBytes = length;
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
 
-    @Override
-    public long getTotalBytes()
-    {
-        return totalBytes;
-    }
+	}
 
-    @Override
-    public long getCompletedBytes()
-    {
-        return totalBytes;
-    }
+	private String buildColumnURL(List<ProteumColumnHandle> columns) {
+		List<String> columnsName = new ArrayList<String>();
+		for (ProteumColumnHandle column : columns)
+			columnsName.add(column.getColumnName());
+		return "columns={" + Joiner.on(",").join(columnsName) + "}";
+	}
 
-    @Override
-    public long getReadTimeNanos()
-    {
-        return 0;
-    }
+	private String buildFilterURL(List<ProteumColumnFilter> filters) {
 
-    @Override
-    public Type getType(int field)
-    {
-        checkArgument(field < columnHandles.size(), "Invalid field index");
-        return columnHandles.get(field).getColumnType();
-    }
+		return "filters={" + Joiner.on("&&").join(filters) + "}";
+	}
 
-    @Override
-    public boolean advanceNextPosition()
-    {
-        if (!lines.hasNext()) {
-            return false;
-        }
-        String line = lines.next();
-        fields = LINE_SPLITTER.splitToList(line);
+	@Override
+	public long getTotalBytes() {
+		return totalBytes;
+	}
 
-        return true;
-    }
+	@Override
+	public long getCompletedBytes() {
+		return totalBytes;
+	}
 
-    private String getFieldValue(int field)
-    {
-        checkState(fields != null, "Cursor has not been advanced yes");
+	@Override
+	public long getReadTimeNanos() {
+		return 0;
+	}
 
-        int columnIndex = fieldToColumnIndex[field];
-        return fields.get(columnIndex);
-    }
+	@Override
+	public Type getType(int field) {
+		checkArgument(field < columnHandles.size(), "Invalid field index");
+		return columnHandles.get(field).getColumnType();
+	}
 
-    @Override
-    public boolean getBoolean(int field)
-    {
-        checkFieldType(field, BOOLEAN);
-        return Boolean.parseBoolean(getFieldValue(field));
-    }
+	@Override
+	public boolean advanceNextPosition() {
+		if (!lines.hasNext()) {
+			return false;
+		}
+		String line = lines.next();
+		fields = LINE_SPLITTER.splitToList(line);
 
-    @Override
-    public long getLong(int field)
-    {
-        checkFieldType(field, BIGINT);
-        return Long.parseLong(getFieldValue(field));
-    }
+		return true;
+	}
 
-    @Override
-    public double getDouble(int field)
-    {
-        checkFieldType(field, DOUBLE);
-        return Double.parseDouble(getFieldValue(field));
-    }
+	private String getFieldValue(int field) {
+		checkState(fields != null, "Cursor has not been advanced yes");
 
-    @Override
-    public Slice getSlice(int field)
-    {
-        checkFieldType(field, VARCHAR);
-        return Slices.utf8Slice(getFieldValue(field));
-    }
+		int columnIndex = fieldToColumnIndex[field];
+		return fields.get(columnIndex);
+	}
 
-    @Override
-    public boolean isNull(int field)
-    {
-        checkArgument(field < columnHandles.size(), "Invalid field index");
-        return Strings.isNullOrEmpty(getFieldValue(field));
-    }
+	@Override
+	public boolean getBoolean(int field) {
+		checkFieldType(field, BOOLEAN);
+		return Boolean.parseBoolean(getFieldValue(field));
+	}
 
-    private void checkFieldType(int field, Type expected)
-    {
-        Type actual = getType(field);
-        checkArgument(actual.equals(expected), "Expected field %s to be type %s but is %s", field, expected, actual);
-    }
+	@Override
+	public long getLong(int field) {
+		checkFieldType(field, BIGINT);
+		return Long.parseLong(getFieldValue(field));
+	}
 
-    @Override
-    public void close()
-    {
-    }
+	@Override
+	public double getDouble(int field) {
+		checkFieldType(field, DOUBLE);
+		return Double.parseDouble(getFieldValue(field));
+	}
+
+	@Override
+	public Slice getSlice(int field) {
+		if (getType(field).equals(TSRangeType.TS_RANGE_TYPE)) {
+			String arr[] = getFieldValue(field).split(":");
+			Long min = Long.parseLong(arr[0]);
+			Long max = Long.parseLong(arr[1]);
+			return TSRange.serialize(TSRange.createRange("["
+					+ (min == 0 ? "" : new TimeStamp(min * 1000)) + ","
+					+ (max == 0 ? "" : new TimeStamp(max * 1000)) + "]"));
+		}
+		checkFieldType(field, VARCHAR);
+		return Slices.utf8Slice(getFieldValue(field));
+	}
+
+	@Override
+	public boolean isNull(int field) {
+		checkArgument(field < columnHandles.size(), "Invalid field index");
+		return Strings.isNullOrEmpty(getFieldValue(field));
+	}
+
+	private void checkFieldType(int field, Type expected) {
+		Type actual = getType(field);
+		checkArgument(actual.equals(expected),
+				"Expected field %s to be type %s but is %s", field, expected,
+				actual);
+	}
+
+	@Override
+	public void close() {
+	}
 }

@@ -12,6 +12,7 @@ public interface RangeSerializer<T extends Comparable<T>>
 {
     //parsing from string
     public Range<T> parse(String range);
+    public Range<T> parse(String range,ConnectorSession session);
 
     //representing as String
     public String getRangeAsString();

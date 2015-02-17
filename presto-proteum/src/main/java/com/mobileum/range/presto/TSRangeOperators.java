@@ -271,11 +271,11 @@ public class TSRangeOperators
 
     @ScalarOperator(CAST)
     @SqlType(TSRangeType.TS_RANGE_TYPE_NAME)
-    public static Slice castFromVarchar(
+    public static Slice castFromVarchar(ConnectorSession session,
             @SqlType(StandardTypes.VARCHAR) Slice slice)
             throws ParseException
     {
-        return TSRange.serialize(rangeSerializer.parse(slice.toStringUtf8()));
+        return TSRange.serialize(rangeSerializer.parse(slice.toStringUtf8(),session));
 
     }
 

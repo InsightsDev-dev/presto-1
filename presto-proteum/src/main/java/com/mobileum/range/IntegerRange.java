@@ -41,12 +41,19 @@ public class IntegerRange
     {
         return Integer.parseInt(value);
     }
+    
+    @Override
+    public Integer parseValue(String value,ConnectorSession session)
+    {
+        return Integer.parseInt(value);
+    }
 
     @Override
-    public Integer parseValue(Slice value, int index)
+    public Integer parseValue(Slice value, Pointer index)
     {
-        increasePointer(Integer.SIZE / Byte.SIZE);
-        return value.getInt(index);
+    	Integer ret=value.getInt(index.getPointer());
+    	index.increment(Integer.SIZE / Byte.SIZE);
+        return ret;
     }
 
     @Override

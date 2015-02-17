@@ -42,12 +42,20 @@ public class TimeStampWithTimeZoneRange
     {
         return TimeStampWithTimeZone.parse(value);
     }
+    //parse string without timezone 
+    //Todo
+    @Override
+    public TimeStampWithTimeZone parseValue(String value,ConnectorSession session)
+    {
+        return TimeStampWithTimeZone.parse(value);
+    }
 
     @Override
-    public TimeStampWithTimeZone parseValue(Slice value, int index)
+    public TimeStampWithTimeZone parseValue(Slice value, Pointer index)
     {
-        increasePointer(TimeStampWithTimeZone.SIZE / Byte.SIZE);
-        return new TimeStampWithTimeZone(value.getLong(index));
+    	TimeStampWithTimeZone ret=new TimeStampWithTimeZone(value.getLong(index.getPointer()));
+        index.increment(TimeStampWithTimeZone.SIZE / Byte.SIZE);
+        return ret;
     }
 
     @Override
