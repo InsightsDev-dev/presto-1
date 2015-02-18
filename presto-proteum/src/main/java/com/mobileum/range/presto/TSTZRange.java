@@ -1,10 +1,10 @@
 package com.mobileum.range.presto;
 
-import org.apache.commons.codec.binary.Base64;
 
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
 
+import com.google.common.io.BaseEncoding;
 import com.mobileum.range.Range;
 import com.mobileum.range.RangeSerializer;
 import com.mobileum.range.TimeStampWithTimeZone;
@@ -21,8 +21,7 @@ public class TSTZRange
 
     public static TimeStampWithTimeZoneRange deSerialize(Slice slice)
     {
-        byte[] arr = slice.getBytes();
-        byte[] decoded = Base64.decodeBase64(arr);
+        byte[] decoded = BaseEncoding.base64().decode(slice.toStringUtf8());
         Slice slice2 = Slices.allocate(decoded.length);
         slice2.setBytes(0, decoded);
         return (TimeStampWithTimeZoneRange) rangeSerializer.parse(slice2);
@@ -41,10 +40,7 @@ public class TSTZRange
     public static Slice serialize(Range<TimeStampWithTimeZone> range)
     {
         Slice s = range.getRangeAsSlice();
-        byte arr[] = s.getBytes();
-        byte[] encoded = Base64.encodeBase64(arr);
-        Slice slice2 = Slices.allocate(encoded.length);
-        slice2.setBytes(0, encoded);
+        Slice slice2 = Slices.utf8Slice(BaseEncoding.base64().encode(s.getBytes()));
         return slice2;
     }
 }

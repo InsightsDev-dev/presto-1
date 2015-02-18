@@ -13,11 +13,6 @@
  */
 package com.facebook.presto.connector.proteum;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
-
-import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,6 +34,8 @@ import com.facebook.presto.spi.ConnectorTableHandle;
 import com.facebook.presto.spi.Domain;
 import com.facebook.presto.spi.FixedSplitSource;
 import com.facebook.presto.spi.TupleDomain;
+import com.facebook.presto.sql.planner.optimizations.ProteumTupleDomain;
+import com.facebook.presto.sql.tree.Expression;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
@@ -55,10 +52,20 @@ implements ConnectorSplitManager
     }
 
    
-
-    @Override
+	public static Expression fromPredicate(Expression expression) {
+		return new com.mobileum.range.presto.RewritingVisitor<Void>().process(expression,
+				new com.mobileum.range.presto.Context<Void>(null, false));
+	}
+	@Override
     public ConnectorPartitionResult getPartitions(ConnectorTableHandle tableHandle, TupleDomain<ConnectorColumnHandle> tupleDomain)
     {
+    	if (tupleDomain instanceof ProteumTupleDomain) {
+    	    @SuppressWarnings("rawtypes")
+			Expression expression = ((ProteumTupleDomain) tupleDomain)
+					.getRemainingExpresstion();
+    	    Expression expression2= fromPredicate(expression);
+			System.out.println(expression2);
+		}
         ProteumTableHandle proteumTableHandle = (ProteumTableHandle) tableHandle;
         List<ProteumColumnFilter> columnFilters = new ArrayList<ProteumColumnFilter>();
         for(Entry<ConnectorColumnHandle, Domain> entry : tupleDomain.getDomains().entrySet()){

@@ -18,9 +18,11 @@ import com.facebook.presto.metadata.ColumnHandle;
 import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.metadata.Partition;
 import com.facebook.presto.metadata.PartitionResult;
+import com.facebook.presto.spi.Domain;
 import com.facebook.presto.spi.TupleDomain;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.split.SplitManager;
+import com.facebook.presto.sql.ExpressionUtils;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.DependencyExtractor;
 import com.facebook.presto.sql.planner.DeterminismEvaluator;
@@ -68,11 +70,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
+
 import io.airlift.log.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -823,8 +827,8 @@ public class PredicatePushDown
                 // The domains should never widen between each pass.
                 tupleDomain = tupleDomain.intersect(node.getGeneratedPartitions().get().getTupleDomainInput()).intersect(node.getPartitionsDomainSummary());
             }
-
-            PartitionResult matchingPartitions = splitManager.getPartitions(node.getTable(), Optional.of(tupleDomain));
+            TupleDomain<ColumnHandle> proteumTupleDomain=new ProteumTupleDomain<ColumnHandle>(tupleDomain.getDomains(),extractionRemainingExpression);
+            PartitionResult matchingPartitions = splitManager.getPartitions(node.getTable(), Optional.of(proteumTupleDomain));
             List<Partition> partitions = matchingPartitions.getPartitions();
             TupleDomain<ColumnHandle> undeterminedTupleDomain = matchingPartitions.getUndeterminedTupleDomain();
 

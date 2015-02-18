@@ -23,7 +23,12 @@
 			<artifactId>presto-spi</artifactId>
 			<scope>provided</scope>
 		</dependency>
-
+		
+		<dependency>
+			<groupId>com.facebook.presto</groupId>
+			<artifactId>presto-parser</artifactId>
+			<scope>provided</scope>
+		</dependency>
 		<dependency>
 			<groupId>com.facebook.presto</groupId>
 			<artifactId>presto-main</artifactId>
@@ -151,12 +156,12 @@
 			<artifactId>validation-api</artifactId>
 			<scope>provided</scope>
 		</dependency>
-
+<!-- 
 		<dependency>
 			<groupId>commons-codec</groupId>
 			<artifactId>commons-codec</artifactId>
 		</dependency>
-
+-->
 		<!-- for testing -->
 		<dependency>
 			<groupId>org.testng</groupId>
