@@ -31,7 +31,7 @@ import java.util.Set;
 /**
  * Defines a set of valid tuples according to the constraints on each of its constituent columns
  */
-public final class TupleDomain<T>
+public class TupleDomain<T>
 {
     /**
      * TupleDomain is internally represented as a normalized map of each column to its
@@ -48,7 +48,7 @@ public final class TupleDomain<T>
      */
     private final Map<T, Domain> domains;
 
-    private TupleDomain(Map<T, Domain> domains)
+    protected TupleDomain(Map<T, Domain> domains)
     {
         if (domains == null || containsNoneDomain(domains)) {
             this.domains = null;
@@ -463,4 +463,5 @@ public final class TupleDomain<T>
     {
         T apply(F input);
     }
+
 }
