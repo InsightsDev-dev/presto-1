@@ -64,7 +64,7 @@ implements ConnectorSplitManager
 			Expression expression = ((ProteumTupleDomain) tupleDomain)
 					.getRemainingExpresstion();
     	    Expression expression2= fromPredicate(expression);
-			System.out.println(expression2);
+			//System.out.println(expression2);
 		}
         ProteumTableHandle proteumTableHandle = (ProteumTableHandle) tableHandle;
         List<ProteumColumnFilter> columnFilters = new ArrayList<ProteumColumnFilter>();

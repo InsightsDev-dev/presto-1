@@ -26,8 +26,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -68,9 +70,13 @@ public class ProteumRecordCursor implements RecordCursor {
 		}
 		try {
 			String path = url.toString() + "?";
-			path += buildColumnURL(columnHandles) + ":";
-			path += buildFilterURL(filters);
-			url = new URL(path);
+			String queryParameters = buildColumnURL(columnHandles) + ":";
+			queryParameters += buildFilterURL(filters);
+			try {
+			url = new URL(path+URLEncoder.encode(queryParameters, "UTF-8"));
+			} catch (UnsupportedEncodingException e) {
+				throw new RuntimeException(e);
+			}
 			HttpURLConnection connection = (HttpURLConnection) url
 					.openConnection();
 			connection.setRequestMethod("GET");
