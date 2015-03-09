@@ -81,6 +81,7 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -171,8 +172,9 @@ public class StatementResource
         try {
             Method method = proteumMetadata.getClass().getMethod("getBaseURL");
             String baseURL = method.invoke(proteumMetadata,null).toString();
-            query = query.replaceAll(" ", "%20");
-            url = new URL(baseURL+"/rewrite?q={"+query);
+            //query = query.replaceAll(" ", "%20");
+            String encodedString = URLEncoder.encode("q={"+query, "UTF-8");
+            url = new URL(baseURL+"/rewrite?"+encodedString);
             HttpURLConnection connection = (HttpURLConnection)url.openConnection();
             connection.setRequestMethod("GET");
             connection.connect();
