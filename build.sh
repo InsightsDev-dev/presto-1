@@ -138,7 +138,7 @@ rm build-*.tar.gz
 timestamp=`date +'%Y%m%d%H%M'`
 if [ "-Pprod" != "$1" ]
 then
-  tar zcvf build-$timestamp.tar.gz *
+  tar zcf build-$timestamp.tar.gz *
   else
-    tar zcvf build-hdfs2-$timestamp.tar.gz *
+    tar zcf build-hdfs2-$timestamp.tar.gz *
 fi
