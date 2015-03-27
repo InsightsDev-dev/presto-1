@@ -17,11 +17,6 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
-
-
-
-
 import java.util.Map.Entry;
 
 import com.facebook.presto.spi.ConnectorColumnHandle;
@@ -38,57 +33,68 @@ import com.facebook.presto.sql.planner.optimizations.ProteumTupleDomain;
 import com.facebook.presto.sql.tree.Expression;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.inject.Inject;
+import com.google.inject.name.Named;
 
-public class ProteumSplitManager
-implements ConnectorSplitManager
-{
-    private final String connectorId;
-    private final ProteumClient client;
+public class ProteumSplitManager implements ConnectorSplitManager {
+	private final String connectorId;
+	private final ProteumClient client;
 
-    public ProteumSplitManager(String connectorId, ProteumClient client)
-    {
-        this.connectorId = connectorId;
-        this.client = client;
-    }
-
-   
-	public static Expression fromPredicate(Expression expression) {
-		return new com.mobileum.range.presto.RewritingVisitor<Void>().process(expression,
-				new com.mobileum.range.presto.Context<Void>(null, false));
+	@Inject
+	public ProteumSplitManager(@Named("connectorId") String connectorId,
+			ProteumClient client, ProteumConfig config) {
+		this.connectorId = connectorId;
+		this.client = client;
 	}
+
+	public static Expression fromPredicate(Expression expression) {
+		return new com.mobileum.range.presto.RewritingVisitor<Void>().process(
+				expression, new com.mobileum.range.presto.Context<Void>(null,
+						false));
+	}
+
 	@Override
-    public ConnectorPartitionResult getPartitions(ConnectorTableHandle tableHandle, TupleDomain<ConnectorColumnHandle> tupleDomain)
-    {
-    	if (tupleDomain instanceof ProteumTupleDomain) {
-    	    @SuppressWarnings("rawtypes")
+	public ConnectorPartitionResult getPartitions(
+			ConnectorTableHandle tableHandle,
+			TupleDomain<ConnectorColumnHandle> tupleDomain) {
+		if (tupleDomain instanceof ProteumTupleDomain) {
+			@SuppressWarnings("rawtypes")
 			Expression expression = ((ProteumTupleDomain) tupleDomain)
 					.getRemainingExpresstion();
-    	    Expression expression2= fromPredicate(expression);
-			//System.out.println(expression2);
+			Expression expression2 = fromPredicate(expression);
+			// System.out.println(expression2);
 		}
-        ProteumTableHandle proteumTableHandle = (ProteumTableHandle) tableHandle;
-        List<ProteumColumnFilter> columnFilters = new ArrayList<ProteumColumnFilter>();
-        for(Entry<ConnectorColumnHandle, Domain> entry : tupleDomain.getDomains().entrySet()){
-            columnFilters.add(new ProteumColumnFilter((ProteumColumnHandle) entry.getKey(), entry.getValue()));
-        }
-        List<ConnectorPartition> partitions = ImmutableList.<ConnectorPartition>of(new ProteumPartition(proteumTableHandle.getSchemaName(), 
-                proteumTableHandle.getTableName(), columnFilters));
-        return new ConnectorPartitionResult(partitions, tupleDomain);
-    }
+		ProteumTableHandle proteumTableHandle = (ProteumTableHandle) tableHandle;
+		List<ProteumColumnFilter> columnFilters = new ArrayList<ProteumColumnFilter>();
+		for (Entry<ConnectorColumnHandle, Domain> entry : tupleDomain
+				.getDomains().entrySet()) {
+			columnFilters.add(new ProteumColumnFilter(
+					(ProteumColumnHandle) entry.getKey(), entry.getValue()));
+		}
+		List<ConnectorPartition> partitions = ImmutableList
+				.<ConnectorPartition> of(new ProteumPartition(
+						proteumTableHandle.getSchemaName(), proteumTableHandle
+								.getTableName(), columnFilters));
+		return new ConnectorPartitionResult(partitions, tupleDomain);
+	}
 
-    @Override
-    public ConnectorSplitSource getPartitionSplits(ConnectorTableHandle tableHandle, List<ConnectorPartition> partitions)
-    {
-        ConnectorPartition partition = partitions.get(0);
-        ProteumPartition proteumPartition = (ProteumPartition) partition;
-        ProteumTableHandle proteumTableHandle = (ProteumTableHandle) tableHandle;
-        ProteumTable table = client.getTable(proteumTableHandle.getSchemaName(), proteumTableHandle.getTableName());
-        List<ConnectorSplit> splits = Lists.newArrayList();
-        for (URL uri : table.getSources()) {
-            splits.add(new ProteumSplit(connectorId, proteumPartition.getSchemaName(), proteumPartition.getTableName(), uri, proteumPartition.getColumnFilters()));
-        }
-        Collections.shuffle(splits);
-        return new FixedSplitSource(connectorId, splits);
-    }
+	@Override
+	public ConnectorSplitSource getPartitionSplits(
+			ConnectorTableHandle tableHandle,
+			List<ConnectorPartition> partitions) {
+		ConnectorPartition partition = partitions.get(0);
+		ProteumPartition proteumPartition = (ProteumPartition) partition;
+		ProteumTableHandle proteumTableHandle = (ProteumTableHandle) tableHandle;
+		ProteumTable table = client.getTable(
+				proteumTableHandle.getSchemaName(),
+				proteumTableHandle.getTableName());
+		List<ConnectorSplit> splits = Lists.newArrayList();
+		for (URL uri : table.getSources()) {
+			splits.add(new ProteumSplit(connectorId, proteumPartition
+					.getSchemaName(), proteumPartition.getTableName(), uri,
+					proteumPartition.getColumnFilters()));
+		}
+		Collections.shuffle(splits);
+		return new FixedSplitSource(connectorId, splits);
+	}
 }
-

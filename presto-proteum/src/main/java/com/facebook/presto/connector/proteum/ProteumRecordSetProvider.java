@@ -13,7 +13,6 @@
  */
 package com.facebook.presto.connector.proteum;
 
-
 import java.util.List;
 
 import com.facebook.presto.spi.ConnectorColumnHandle;
@@ -21,27 +20,29 @@ import com.facebook.presto.spi.ConnectorRecordSetProvider;
 import com.facebook.presto.spi.ConnectorSplit;
 import com.facebook.presto.spi.RecordSet;
 import com.google.common.collect.ImmutableList;
+import com.google.inject.Inject;
+import com.google.inject.name.Named;
 
-public class ProteumRecordSetProvider implements ConnectorRecordSetProvider
-{
-    private final String connectorId;
+public class ProteumRecordSetProvider implements ConnectorRecordSetProvider {
+	private final String connectorId;
 
-    public ProteumRecordSetProvider(String connectorId)
-    {
-        this.connectorId = connectorId;
-    }
+	@Inject
+	public ProteumRecordSetProvider(@Named("connectorId") String connectorId) {
+		this.connectorId = connectorId;
+	}
 
-    @Override
-    public RecordSet getRecordSet(ConnectorSplit split, List<? extends ConnectorColumnHandle> columns)
-    {
+	@Override
+	public RecordSet getRecordSet(ConnectorSplit split,
+			List<? extends ConnectorColumnHandle> columns) {
 
-        ProteumSplit proteumSplit = (ProteumSplit) split;
+		ProteumSplit proteumSplit = (ProteumSplit) split;
 
-        ImmutableList.Builder<ProteumColumnHandle> handles = ImmutableList.builder();
-        for (ConnectorColumnHandle handle : columns) {
-            handles.add((ProteumColumnHandle) handle);
-        }
+		ImmutableList.Builder<ProteumColumnHandle> handles = ImmutableList
+				.builder();
+		for (ConnectorColumnHandle handle : columns) {
+			handles.add((ProteumColumnHandle) handle);
+		}
 
-        return new ProteumRecordSet(proteumSplit, handles.build());
-    }
+		return new ProteumRecordSet(proteumSplit, handles.build());
+	}
 }

@@ -17,20 +17,30 @@ import io.airlift.log.Logger;
 
 import org.eclipse.jetty.server.Server;
 
-public class PrestoProteumService {
-	private static Logger log = Logger.get(PrestoProteumService.class);	
-    public static void start(ProteumClient client){
-        Server server = new Server(8360);
-        server.setHandler(new PrestoProteumServiceHandler(client));
-        try {
-        	log.info("Starting PrestoProteumServer");
-            server.start();
-            log.info("Started PrestoProteumServer");
-            server.join();
-        } catch (Exception e) {
-            // TODO Auto-generated catch block
-        	log.error(e);
-        }
+import com.google.inject.Inject;
 
-    }
+public class PrestoProteumService {
+	private final int pluginListerPort;
+
+	@Inject
+	public PrestoProteumService(ProteumConfig proteumConfig) {
+		this.pluginListerPort = proteumConfig.getPluginListerPort();
+	}
+
+	private static Logger log = Logger.get(PrestoProteumService.class);
+
+	public void start(ProteumClient client) {
+		Server server = new Server(pluginListerPort);
+		server.setHandler(new PrestoProteumServiceHandler(client));
+		try {
+			log.info("Starting PrestoProteumServer");
+			server.start();
+			log.info("Started PrestoProteumServer");
+			server.join();
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			log.error(e);
+		}
+
+	}
 }

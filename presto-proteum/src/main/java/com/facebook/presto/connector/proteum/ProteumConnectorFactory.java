@@ -13,49 +13,57 @@
  */
 package com.facebook.presto.connector.proteum;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import io.airlift.bootstrap.Bootstrap;
 
 import java.util.Map;
 
 import com.facebook.presto.spi.Connector;
 import com.facebook.presto.spi.ConnectorFactory;
 import com.facebook.presto.spi.type.TypeManager;
-import com.google.common.collect.ImmutableMap;
+import com.google.inject.Injector;
 
-public class ProteumConnectorFactory implements ConnectorFactory
-{
-    private final TypeManager typeManager;
-    private final Map<String, String> optionalConfig;
-    
-    public ProteumConnectorFactory(TypeManager typeManager, Map<String, String> optionalConfig)
-    {
-        this.typeManager = typeManager;
-        this.optionalConfig = optionalConfig;
-    }
+public class ProteumConnectorFactory implements ConnectorFactory {
+	private final TypeManager typeManager;
+	private final Map<String, String> optionalConfig;
 
-    @Override
-    public String getName()
-    {
-        return "proteum";
-    }
+	public ProteumConnectorFactory(TypeManager typeManager,
+			Map<String, String> optionalConfig) {
+		this.typeManager = typeManager;
+		this.optionalConfig = optionalConfig;
+	}
 
-    @Override
-    public Connector create(final String connectorId, Map<String, String> requiredConfig)
-    {
-        final ProteumClient client = new ProteumClient(requiredConfig.get("proteum.host"), 
-                requiredConfig.get("proteum.port")); 
-        ProteumMetadata metadata = new ProteumMetadata(connectorId, client);
-        ProteumSplitManager splitManager = new ProteumSplitManager(connectorId, client);
-        ProteumRecordSetProvider recordSetProvider = new ProteumRecordSetProvider(connectorId);
-        ProteumHandleResolver handleResolver = new ProteumHandleResolver(connectorId);
-        ProteumConnector connector = new ProteumConnector(metadata, splitManager, recordSetProvider, handleResolver);
-        new Thread(new Runnable() {
+	@Override
+	public String getName() {
+		return "proteum";
+	}
 
-			@Override
-			public void run() {
-				PrestoProteumService.start(client);				
-			}        	
-        }).start();        
-        return connector;
-    }
+	@Override
+	public Connector create(final String connectorId,
+			Map<String, String> requiredConfig) {
+		Bootstrap app = new Bootstrap(new ProteumModule(connectorId,
+				typeManager));
+		Injector injector = null;
+		try {
+			injector = app.strictConfig().doNotInitializeLogging()
+					.setRequiredConfigurationProperties(requiredConfig)
+					.setOptionalConfigurationProperties(optionalConfig)
+					.initialize();
+			final ProteumClient client = injector
+					.getInstance(ProteumClient.class);
+			final PrestoProteumService proteum = injector
+					.getInstance(PrestoProteumService.class);
+			new Thread(new Runnable() {
+
+				@Override
+				public void run() {
+					proteum.start(client);
+				}
+			}).start();
+			return injector.getInstance(ProteumConnector.class);
+		} catch (Throwable e) {
+			throw new RuntimeException(e.getMessage() != null
+					&& e.getMessage().length() > 250 ? e.getMessage()
+					.substring(0, 250) : e.getMessage());
+		}
+	}
 }

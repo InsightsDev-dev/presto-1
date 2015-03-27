@@ -26,63 +26,57 @@ import com.facebook.presto.spi.ConnectorRecordSetProvider;
 import com.facebook.presto.spi.ConnectorRecordSinkProvider;
 import com.facebook.presto.spi.ConnectorSplitManager;
 
-public class ProteumConnector  implements Connector
-{
-    private final ProteumMetadata metadata;
-    private final ProteumSplitManager splitManager;
-    private final ProteumRecordSetProvider recordSetProvider;
-    private final ProteumHandleResolver handleResolver;
+public class ProteumConnector implements Connector {
+	private final ProteumMetadata metadata;
+	private final ProteumSplitManager splitManager;
+	private final ProteumRecordSetProvider recordSetProvider;
+	private final ProteumHandleResolver handleResolver;
 
-    public ProteumConnector(
-            ProteumMetadata metadata,
-            ProteumSplitManager splitManager,
-            ProteumRecordSetProvider recordSetProvider,
-            ProteumHandleResolver handleResolver)
-    {
-        this.metadata = checkNotNull(metadata, "metadata is null");
-        this.splitManager = checkNotNull(splitManager, "splitManager is null");
-        this.recordSetProvider = checkNotNull(recordSetProvider, "recordSetProvider is null");
-        this.handleResolver = checkNotNull(handleResolver, "handleResolver is null");
-    }
+	@Inject
+	public ProteumConnector(ProteumMetadata metadata,
+			ProteumSplitManager splitManager,
+			ProteumRecordSetProvider recordSetProvider,
+			ProteumHandleResolver handleResolver) {
+		this.metadata = checkNotNull(metadata, "metadata is null");
+		this.splitManager = checkNotNull(splitManager, "splitManager is null");
+		this.recordSetProvider = checkNotNull(recordSetProvider,
+				"recordSetProvider is null");
+		this.handleResolver = checkNotNull(handleResolver,
+				"handleResolver is null");
+	}
 
-    @Override
-    public ConnectorMetadata getMetadata()
-    {
-        return metadata;
-    }
+	@Override
+	public ConnectorMetadata getMetadata() {
+		return metadata;
+	}
 
-    @Override
-    public ConnectorSplitManager getSplitManager()
-    {
-        return splitManager;
-    }
+	@Override
+	public ConnectorSplitManager getSplitManager() {
+		return splitManager;
+	}
 
-    @Override
-    public ConnectorRecordSetProvider getRecordSetProvider()
-    {
-        return recordSetProvider;
-    }
+	@Override
+	public ConnectorRecordSetProvider getRecordSetProvider() {
+		return recordSetProvider;
+	}
 
-    @Override
-    public ConnectorHandleResolver getHandleResolver()
-    {
-        return handleResolver;
-    }
+	@Override
+	public ConnectorHandleResolver getHandleResolver() {
+		return handleResolver;
+	}
 
-    @Override
-    public ConnectorRecordSinkProvider getRecordSinkProvider()
-    {
-        throw new UnsupportedOperationException();
-    }
+	@Override
+	public ConnectorRecordSinkProvider getRecordSinkProvider() {
+		throw new UnsupportedOperationException();
+	}
 
-    @Override
-    public ConnectorIndexResolver getIndexResolver()
-    {
-        throw new UnsupportedOperationException();
-    }
+	@Override
+	public ConnectorIndexResolver getIndexResolver() {
+		throw new UnsupportedOperationException();
+	}
 
-    @Override
-    public ConnectorPageSourceProvider getPageSourceProvider() {
-        throw new UnsupportedOperationException();
-    }
+	@Override
+	public ConnectorPageSourceProvider getPageSourceProvider() {
+		throw new UnsupportedOperationException();
+	}
 }

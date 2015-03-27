@@ -33,15 +33,16 @@ import com.facebook.presto.spi.type.DoubleType;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.spi.type.VarcharType;
 import com.google.common.collect.Lists;
+import com.google.inject.Inject;
 import com.mobileum.range.presto.TSRangeType;
 
 public class ProteumClient {
 	private String baseURL;
 
-	public ProteumClient(String host, String port) {
-		List<String> schemas = new ArrayList<String>();
+	@Inject
+	public ProteumClient(ProteumConfig config) {
 		tables = new HashMap<String, Map<String, ProteumTable>>();
-		String baseURL = "http://" + host + ":" + port;
+		String baseURL = config.intializeAndGetProteumServerURL();
 		this.baseURL = baseURL;
 		try {
 			URL url = new URL(baseURL + "/list");

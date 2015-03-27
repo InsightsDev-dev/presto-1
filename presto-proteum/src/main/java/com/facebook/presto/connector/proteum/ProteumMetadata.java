@@ -33,132 +33,145 @@ import com.facebook.presto.spi.SchemaTablePrefix;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.inject.Inject;
+import com.google.inject.name.Named;
 
-public class ProteumMetadata extends ReadOnlyConnectorMetadata{
-    private String connectorID;
-    private ProteumClient client;
-    
-    public ProteumMetadata(String connectorID, ProteumClient client){
-        this.connectorID = connectorID;
-        this.client = client;
-    }
-    @Override
-    public List<String> listSchemaNames(ConnectorSession session) {
-        return Lists.newArrayList(client.getSchemas());
-    }
-    
-    public List<String> listSchemaNames()
-    {
-        return ImmutableList.copyOf(client.getSchemas());
-    }
+public class ProteumMetadata extends ReadOnlyConnectorMetadata {
+	private String connectorID;
+	private ProteumClient client;
 
-    @Override
-    public ConnectorTableHandle getTableHandle(ConnectorSession session,
-            SchemaTableName tableName) {
-        return new ProteumTableHandle(connectorID, tableName.getSchemaName(), tableName.getTableName());
-    }
+	@Inject
+	public ProteumMetadata(@Named("connectorId") String connectorID,
+			ProteumClient client) {
+		this.connectorID = connectorID;
+		this.client = client;
+	}
 
-    @Override
-    public ConnectorTableMetadata getTableMetadata(ConnectorTableHandle table) {
-        ProteumTableHandle handle = (ProteumTableHandle) table;
-        ProteumTable proteumTable = client.getTable(handle.getSchemaName(), handle.getTableName());
-        if (proteumTable == null) {
-            return null;
-        }
-        SchemaTableName schemaTableName = new SchemaTableName(
-                handle.getSchemaName(), handle.getTableName());
-        return new ConnectorTableMetadata(schemaTableName, proteumTable.getColumnsMetadata());
-    }
+	@Override
+	public List<String> listSchemaNames(ConnectorSession session) {
+		return Lists.newArrayList(client.getSchemas());
+	}
 
-    @Override
-    public List<SchemaTableName> listTables(ConnectorSession session,
-            String schemaNameOrNull) {
-        if(schemaNameOrNull == null) return null;
-        Set<String> tableNames = client.getTableNames(schemaNameOrNull);
-        if(tableNames == null) return null;
-        List<SchemaTableName> result = new ArrayList<SchemaTableName>();
-        for(String table : tableNames){
-            result.add(new SchemaTableName(schemaNameOrNull, table));
-        }
-        return result;
-    }
+	public List<String> listSchemaNames() {
+		return ImmutableList.copyOf(client.getSchemas());
+	}
 
-   
+	@Override
+	public ConnectorTableHandle getTableHandle(ConnectorSession session,
+			SchemaTableName tableName) {
+		return new ProteumTableHandle(connectorID, tableName.getSchemaName(),
+				tableName.getTableName());
+	}
 
-    @Override
-    public ConnectorColumnHandle getSampleWeightColumnHandle(
-            ConnectorTableHandle tableHandle) {
-        // TODO Auto-generated method stub
-        return null;
-    }
+	@Override
+	public ConnectorTableMetadata getTableMetadata(ConnectorTableHandle table) {
+		ProteumTableHandle handle = (ProteumTableHandle) table;
+		ProteumTable proteumTable = client.getTable(handle.getSchemaName(),
+				handle.getTableName());
+		if (proteumTable == null) {
+			return null;
+		}
+		SchemaTableName schemaTableName = new SchemaTableName(
+				handle.getSchemaName(), handle.getTableName());
+		return new ConnectorTableMetadata(schemaTableName,
+				proteumTable.getColumnsMetadata());
+	}
 
-    @Override
-    public Map<String, ConnectorColumnHandle> getColumnHandles(
-            ConnectorTableHandle tableHandle) {
-        ProteumTableHandle pTableHandle = (ProteumTableHandle) tableHandle;
-        ProteumTable table = client.getTable(pTableHandle.getSchemaName(), pTableHandle.getTableName());
-        if(table == null) return null;
-        List<ColumnMetadata> columnsMetaData =  table.getColumnsMetadata();
-        Map<String, ConnectorColumnHandle> result = new HashMap<String, ConnectorColumnHandle>();
-        for(ColumnMetadata meta : columnsMetaData){
-            result.put(meta.getName(), new ProteumColumnHandle(connectorID, meta));
-        }
-        return result;
-    }
+	@Override
+	public List<SchemaTableName> listTables(ConnectorSession session,
+			String schemaNameOrNull) {
+		if (schemaNameOrNull == null)
+			return null;
+		Set<String> tableNames = client.getTableNames(schemaNameOrNull);
+		if (tableNames == null)
+			return null;
+		List<SchemaTableName> result = new ArrayList<SchemaTableName>();
+		for (String table : tableNames) {
+			result.add(new SchemaTableName(schemaNameOrNull, table));
+		}
+		return result;
+	}
 
-    @Override
-    public ColumnMetadata getColumnMetadata(ConnectorTableHandle tableHandle,
-            ConnectorColumnHandle columnHandle) {
-        // TODO Auto-generated method stub
-        return ((ProteumColumnHandle)columnHandle).getColumnMetadata();
-    }
+	@Override
+	public ConnectorColumnHandle getSampleWeightColumnHandle(
+			ConnectorTableHandle tableHandle) {
+		// TODO Auto-generated method stub
+		return null;
+	}
 
-    @Override
-    public Map<SchemaTableName, List<ColumnMetadata>> listTableColumns(
-            ConnectorSession session, SchemaTablePrefix prefix) {
-        ImmutableMap.Builder<SchemaTableName, List<ColumnMetadata>> columns = ImmutableMap.builder();
-        for (SchemaTableName tableName : listTables(session, prefix)) {
-            ConnectorTableMetadata tableMetadata = getTableMetadata(tableName);
-            // table can disappear during listing operation
-            if (tableMetadata != null) {
-                columns.put(tableName, tableMetadata.getColumns());
-            }
-        }
-        return columns.build();
-    }
-    
-    private ConnectorTableMetadata getTableMetadata(SchemaTableName tableName)
-    {
-        if (!listSchemaNames().contains(tableName.getSchemaName())) {
-            return null;
-        }
+	@Override
+	public Map<String, ConnectorColumnHandle> getColumnHandles(
+			ConnectorTableHandle tableHandle) {
+		ProteumTableHandle pTableHandle = (ProteumTableHandle) tableHandle;
+		ProteumTable table = client.getTable(pTableHandle.getSchemaName(),
+				pTableHandle.getTableName());
+		if (table == null)
+			return null;
+		List<ColumnMetadata> columnsMetaData = table.getColumnsMetadata();
+		Map<String, ConnectorColumnHandle> result = new HashMap<String, ConnectorColumnHandle>();
+		for (ColumnMetadata meta : columnsMetaData) {
+			result.put(meta.getName(), new ProteumColumnHandle(connectorID,
+					meta));
+		}
+		return result;
+	}
 
-        ProteumTable table = client.getTable(tableName.getSchemaName(), tableName.getTableName());
-        if (table == null) {
-            return null;
-        }
+	@Override
+	public ColumnMetadata getColumnMetadata(ConnectorTableHandle tableHandle,
+			ConnectorColumnHandle columnHandle) {
+		// TODO Auto-generated method stub
+		return ((ProteumColumnHandle) columnHandle).getColumnMetadata();
+	}
 
-        return new ConnectorTableMetadata(tableName, table.getColumnsMetadata());
-    }
-    
-    private List<SchemaTableName> listTables(ConnectorSession session, SchemaTablePrefix prefix)
-    {
-        if (prefix.getSchemaName() == null) {
-            return listTables(session, prefix.getSchemaName());
-        }
-        return ImmutableList.of(new SchemaTableName(prefix.getSchemaName(), prefix.getTableName()));
-    }
-    
-    public void addTable(String schema){
-        try {
-            client.addTable(schema);
-        } catch (MalformedURLException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-            throw new RuntimeException("Exception in creating the view");
-        }
-    }
-    public String getBaseURL(){
-        return client.getBaseURL();
-    }
+	@Override
+	public Map<SchemaTableName, List<ColumnMetadata>> listTableColumns(
+			ConnectorSession session, SchemaTablePrefix prefix) {
+		ImmutableMap.Builder<SchemaTableName, List<ColumnMetadata>> columns = ImmutableMap
+				.builder();
+		for (SchemaTableName tableName : listTables(session, prefix)) {
+			ConnectorTableMetadata tableMetadata = getTableMetadata(tableName);
+			// table can disappear during listing operation
+			if (tableMetadata != null) {
+				columns.put(tableName, tableMetadata.getColumns());
+			}
+		}
+		return columns.build();
+	}
+
+	private ConnectorTableMetadata getTableMetadata(SchemaTableName tableName) {
+		if (!listSchemaNames().contains(tableName.getSchemaName())) {
+			return null;
+		}
+
+		ProteumTable table = client.getTable(tableName.getSchemaName(),
+				tableName.getTableName());
+		if (table == null) {
+			return null;
+		}
+
+		return new ConnectorTableMetadata(tableName, table.getColumnsMetadata());
+	}
+
+	private List<SchemaTableName> listTables(ConnectorSession session,
+			SchemaTablePrefix prefix) {
+		if (prefix.getSchemaName() == null) {
+			return listTables(session, prefix.getSchemaName());
+		}
+		return ImmutableList.of(new SchemaTableName(prefix.getSchemaName(),
+				prefix.getTableName()));
+	}
+
+	public void addTable(String schema) {
+		try {
+			client.addTable(schema);
+		} catch (MalformedURLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			throw new RuntimeException("Exception in creating the view");
+		}
+	}
+
+	public String getBaseURL() {
+		return client.getBaseURL();
+	}
 }
