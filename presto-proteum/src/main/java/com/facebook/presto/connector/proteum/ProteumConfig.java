@@ -13,6 +13,7 @@ import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 
 import com.google.common.base.Splitter;
+
 /**
  * 
  * @author Dilip Kasana
@@ -96,7 +97,7 @@ public class ProteumConfig {
 				try {
 					URL myurl = new URL(tempURL);
 					connection = (HttpURLConnection) myurl.openConnection();
-					connection.setConnectTimeout(SECOND);
+					connection.setConnectTimeout(4 * SECOND);
 					connection.setReadTimeout(SECOND);
 					connection.setRequestMethod("HEAD");
 					int code = connection.getResponseCode();
