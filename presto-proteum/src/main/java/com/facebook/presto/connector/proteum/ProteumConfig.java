@@ -89,7 +89,7 @@ public class ProteumConfig {
 		if (isBaseURLIntializationRequired) {
 			isBaseURLIntializationRequired = false;
 			if (proteumServerURIs.size() == 1) {
-				return proteumServerURIs.get(0);
+				return "http://" + proteumServerURIs.get(0) + ":" + proteumServerPort;
 			}
 			for (String host : proteumServerURIs) {
 				String tempURL = "http://" + host + ":" + proteumServerPort;
