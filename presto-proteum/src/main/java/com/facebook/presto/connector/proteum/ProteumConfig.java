@@ -65,13 +65,18 @@ public class ProteumConfig {
 	public List<String> getBaseURL() {
 		return proteumServerURIs;
 	}
+	
+	public void resetActiveURL(){
+	    this.baseURL = null;
+	    this.isBaseURLIntializationRequired = true;
+	}
 
 	public String intializeAndGetProteumServerURL() {
 		if (baseURL == null) {
 			baseURL = initilizeURL();
 		}
 		if (baseURL == null) {
-			throw new RuntimeException("proteum host not defined");
+		    return  "http://" + proteumServerURIs.get(0) + ":" + proteumServerPort;
 		}
 		return baseURL;
 	}

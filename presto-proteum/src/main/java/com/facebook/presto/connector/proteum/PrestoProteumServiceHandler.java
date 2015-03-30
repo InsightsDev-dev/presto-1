@@ -46,7 +46,11 @@ public class PrestoProteumServiceHandler extends AbstractHandler {
 				}
 			}
 		}
-
+		if (target.equals("/initialize")) {
+            System.out.println("handling request = " + target);
+            client.reinitializeClient();
+            System.out.println("client initialization done");
+        }
 	}
 
 }
