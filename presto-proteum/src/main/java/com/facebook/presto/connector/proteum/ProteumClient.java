@@ -57,6 +57,7 @@ public class ProteumClient {
 				addTable(inputLine);
 			}
 		} catch (Exception e) {
+			throw new RuntimeException(e);
 		}
 
 		// try{
