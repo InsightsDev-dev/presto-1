@@ -73,7 +73,8 @@ public class ProteumRecordCursor implements RecordCursor {
 			String queryParameters = buildColumnURL(columnHandles) + ":";
 			queryParameters += buildFilterURL(filters);
 			try {
-			url = new URL(path+URLEncoder.encode(queryParameters, "UTF-8"));
+				url = new URL(path
+						+ URLEncoder.encode(queryParameters, "UTF-8"));
 			} catch (UnsupportedEncodingException e) {
 				throw new RuntimeException(e);
 			}
@@ -174,7 +175,7 @@ public class ProteumRecordCursor implements RecordCursor {
 			Long min = Long.parseLong(arr[0]);
 			Long max = Long.parseLong(arr[1]);
 			return TSRange.serialize(TSRange.createRange("["
-					+ (min == 0 ? "" : new TimeStamp(min * 1000)) + ","
+					+ (min == -1 ? "" : new TimeStamp(min * 1000)) + ","
 					+ (max == 0 ? "" : new TimeStamp(max * 1000)) + "]"));
 		}
 		checkFieldType(field, VARCHAR);
