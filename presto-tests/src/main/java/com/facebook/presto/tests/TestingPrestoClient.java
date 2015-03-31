@@ -160,6 +160,12 @@ public class TestingPrestoClient
                     else if (TIMESTAMP_WITH_TIME_ZONE.equals(type)) {
                         row.add(new Timestamp(unpackMillisUtc(parseTimestampWithTimeZone((String) value))));
                     }
+                    else if("int4range".equals(type.getDisplayName()) || "int8range".equals(type.getDisplayName())
+                    		|| "numrange".equals(type.getDisplayName()) || "tsrange".equals(type.getDisplayName())
+                    		|| "tstzrange".equals(type.getDisplayName()) || "daterange".equals(type.getDisplayName()))
+                    {
+                        row.add(value);
+                    }
                     else {
                         throw new AssertionError("unhandled type: " + type);
                     }
