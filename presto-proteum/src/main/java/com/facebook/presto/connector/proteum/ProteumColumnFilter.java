@@ -41,7 +41,7 @@ public class ProteumColumnFilter {
     private String getStringValue(Marker marker){
         Object value = marker.getValue();
         if(value instanceof Slice){
-            return new String(((Slice) value).getBytes());
+			return "'" + new String(((Slice) value).getBytes()) + "'";
         }
         else return value.toString();
     }
@@ -57,80 +57,98 @@ public class ProteumColumnFilter {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        int domainNum = 1;
-        int numOfDomains = domain.getRanges().getRangeCount();
-        String columnName = columnHandle.getColumnName();
-        //System.out.println(domain.getRanges());
-        
-        sb.append("(");
-        for (Range range : domain.getRanges()) {
-            sb.append("(");
-            if (range.isSingleValue()) {
-                sb.append(columnName);
-                sb.append("=");
-                sb.append(getStringValue(range.getLow()));
-            } else if(range.getLow().isLowerUnbounded()  ||range.getHigh().isUpperUnbounded() ){
-                // filter corresponds to <=, <
-                if(range.getLow().isLowerUnbounded() && range.getHigh().getBound() == Marker.Bound.EXACTLY) {
-                    sb.append(columnName);
-                    sb.append(" ");
-                    sb.append("<=");
-                    sb.append(" ");
-                    sb.append(getStringValue(range.getHigh()));
-                }else if(range.getLow().isLowerUnbounded()){
-                    sb.append(columnName);
-                    sb.append(" ");
-                    sb.append("<");
-                    sb.append(" ");
-                    sb.append(getStringValue(range.getHigh()));
-                }
-                // filter corresponds to >=, >
-                if(range.getHigh().isUpperUnbounded() && range.getLow().getBound() == Marker.Bound.EXACTLY){
-                    sb.append(columnName);
-                    sb.append(" ");
-                    sb.append(">=");
-                    sb.append(" ");
-                    sb.append(getStringValue(range.getLow()));
-                }else if(range.getHigh().isUpperUnbounded()){
-                    sb.append(columnName);
-                    sb.append(" ");
-                    sb.append(">");
-                    sb.append(" ");
-                    sb.append(getStringValue(range.getLow()));
-                }
-            }
-            else{
-                //bounded range filters
-                sb.append(columnName);
-                sb.append(" ");
-                if(range.getLow().getBound() == Marker.Bound.EXACTLY){
-                    sb.append(">=");
-                }else{
-                    sb.append(">");
-                }
-                sb.append(" ");
-                sb.append(getStringValue(range.getLow()));
-                sb.append(" ");
-                sb.append("&&");
+		StringBuilder sb = new StringBuilder();
+		int domainNum = 1;
+		int numOfDomains = domain.getRanges().getRangeCount();
+		String columnName = columnHandle.getColumnName();
+		// System.out.println(domain.getRanges());
 
-                sb.append(columnName);
-                sb.append(" ");
-                if(range.getHigh().getBound() == Marker.Bound.EXACTLY){
-                    sb.append("<=");
-                }else{
-                    sb.append("<");
-                }
-                sb.append(getStringValue(range.getHigh()));
-                sb.append(" ");
-            }
-            sb.append(")");
-            if(domainNum < numOfDomains){
-                sb.append("||");
-            }
-            domainNum++;
-        }
-        sb.append(")");
-        return sb.toString();
-    }
+		sb.append("(");
+		if (domain.isNone()) {
+			sb.append(columnName);
+			sb.append(" is NULL");
+			sb.append(")");
+			return sb.toString();
+		}
+		if (domain.isNullAllowed()) {
+			sb.append("(");
+			sb.append(columnName);
+			sb.append(" is NULL");
+			sb.append(")");
+			if (domain.getRanges().getRanges().size() > 0) {
+				sb.append("||");
+			}
+		}
+		for (Range range : domain.getRanges()) {
+			sb.append("(");
+			if (range.isAll()) {
+				sb.append(columnName);
+				sb.append(" is NOT NULL");
+			} else if (range.isSingleValue()) {
+				sb.append(columnName);
+				sb.append("=");
+				sb.append(getStringValue(range.getLow()));
+			} else if (range.getLow().isLowerUnbounded() || range.getHigh().isUpperUnbounded()) {
+				// filter corresponds to <=, <
+				if (range.getLow().isLowerUnbounded() && range.getHigh().getBound() == Marker.Bound.EXACTLY) {
+					sb.append(columnName);
+					sb.append(" ");
+					sb.append("<=");
+					sb.append(" ");
+					sb.append(getStringValue(range.getHigh()));
+				} else if (range.getLow().isLowerUnbounded()) {
+					sb.append(columnName);
+					sb.append(" ");
+					sb.append("<");
+					sb.append(" ");
+					sb.append(getStringValue(range.getHigh()));
+				}
+				// filter corresponds to >=, >
+				if (range.getHigh().isUpperUnbounded() && range.getLow().getBound() == Marker.Bound.EXACTLY) {
+					sb.append(columnName);
+					sb.append(" ");
+					sb.append(">=");
+					sb.append(" ");
+					sb.append(getStringValue(range.getLow()));
+				} else if (range.getHigh().isUpperUnbounded()) {
+					sb.append(columnName);
+					sb.append(" ");
+					sb.append(">");
+					sb.append(" ");
+					sb.append(getStringValue(range.getLow()));
+				}
+			} 
+			else {
+				// bounded range filters
+				sb.append(columnName);
+				sb.append(" ");
+				if (range.getLow().getBound() == Marker.Bound.EXACTLY) {
+					sb.append(">=");
+				} else {
+					sb.append(">");
+				}
+				sb.append(" ");
+				sb.append(getStringValue(range.getLow()));
+				sb.append(" ");
+				sb.append("&&");
+
+				sb.append(columnName);
+				sb.append(" ");
+				if (range.getHigh().getBound() == Marker.Bound.EXACTLY) {
+					sb.append("<=");
+				} else {
+					sb.append("<");
+				}
+				sb.append(getStringValue(range.getHigh()));
+				sb.append(" ");
+			}
+			sb.append(")");
+			if (domainNum < numOfDomains) {
+				sb.append("||");
+			}
+			domainNum++;
+		}
+		sb.append(")");
+		return sb.toString();
+	}
 }
