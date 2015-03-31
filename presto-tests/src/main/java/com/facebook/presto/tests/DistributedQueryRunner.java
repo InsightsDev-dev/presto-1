@@ -67,8 +67,13 @@ public class DistributedQueryRunner
             log.info("Created TestingDiscoveryServer in %s", nanosSince(start).convertToMostSuccinctTimeUnit());
 
             ImmutableList.Builder<TestingPrestoServer> servers = ImmutableList.builder();
+            if(workersCount==1){
+                coordinator = closer.register(createTestingPrestoServer(discoveryServer.getBaseUrl(), false));
+                servers.add(coordinator);
+            }else{
             coordinator = closer.register(createTestingPrestoServer(discoveryServer.getBaseUrl(), true));
             servers.add(coordinator);
+            }
 
             for (int i = 1; i < workersCount; i++) {
                 TestingPrestoServer worker = closer.register(createTestingPrestoServer(discoveryServer.getBaseUrl(), false));

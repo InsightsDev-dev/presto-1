@@ -49,8 +49,7 @@ import com.mobileum.range.presto.TSRange;
 import com.mobileum.range.presto.TSRangeType;
 
 public class ProteumRecordCursor implements RecordCursor {
-	private static final Splitter LINE_SPLITTER = Splitter.on(";")
-			.trimResults();
+	private static final Splitter LINE_SPLITTER = Splitter.on(";");
 
 	private final List<ProteumColumnHandle> columnHandles;
 	private final int[] fieldToColumnIndex;

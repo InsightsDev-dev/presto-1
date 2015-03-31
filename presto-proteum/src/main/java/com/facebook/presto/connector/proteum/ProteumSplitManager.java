@@ -39,12 +39,14 @@ import com.google.inject.name.Named;
 public class ProteumSplitManager implements ConnectorSplitManager {
 	private final String connectorId;
 	private final ProteumClient client;
+	private final boolean notApplyFilter;
 
 	@Inject
 	public ProteumSplitManager(@Named("connectorId") String connectorId,
 			ProteumClient client, ProteumConfig config) {
 		this.connectorId = connectorId;
 		this.client = client;
+		notApplyFilter = config.getNotApplyFilter();
 	}
 
 	public static Expression fromPredicate(Expression expression) {
@@ -57,25 +59,38 @@ public class ProteumSplitManager implements ConnectorSplitManager {
 	public ConnectorPartitionResult getPartitions(
 			ConnectorTableHandle tableHandle,
 			TupleDomain<ConnectorColumnHandle> tupleDomain) {
-		if (tupleDomain instanceof ProteumTupleDomain) {
-			@SuppressWarnings("rawtypes")
-			Expression expression = ((ProteumTupleDomain) tupleDomain)
-					.getRemainingExpresstion();
-			Expression expression2 = fromPredicate(expression);
-			// System.out.println(expression2);
-		}
 		ProteumTableHandle proteumTableHandle = (ProteumTableHandle) tableHandle;
-		List<ProteumColumnFilter> columnFilters = new ArrayList<ProteumColumnFilter>();
-		for (Entry<ConnectorColumnHandle, Domain> entry : tupleDomain
-				.getDomains().entrySet()) {
-			columnFilters.add(new ProteumColumnFilter(
-					(ProteumColumnHandle) entry.getKey(), entry.getValue()));
+		if (notApplyFilter) {
+			List<ConnectorPartition> partitions = ImmutableList
+					.<ConnectorPartition> of(new ProteumPartition(
+							proteumTableHandle.getSchemaName(),
+							proteumTableHandle.getTableName(), Lists
+									.<ProteumColumnFilter> newArrayList()));
+			return new ConnectorPartitionResult(partitions, tupleDomain);
+
+		} else {
+
+			if (tupleDomain instanceof ProteumTupleDomain) {
+				@SuppressWarnings("rawtypes")
+				Expression expression = ((ProteumTupleDomain) tupleDomain)
+						.getRemainingExpresstion();
+				Expression expression2 = fromPredicate(expression);
+				// System.out.println(expression2);
+			}
+			List<ProteumColumnFilter> columnFilters = new ArrayList<ProteumColumnFilter>();
+			for (Entry<ConnectorColumnHandle, Domain> entry : tupleDomain
+					.getDomains().entrySet()) {
+				columnFilters
+						.add(new ProteumColumnFilter(
+								(ProteumColumnHandle) entry.getKey(), entry
+										.getValue()));
+			}
+			List<ConnectorPartition> partitions = ImmutableList
+					.<ConnectorPartition> of(new ProteumPartition(
+							proteumTableHandle.getSchemaName(),
+							proteumTableHandle.getTableName(), columnFilters));
+			return new ConnectorPartitionResult(partitions, tupleDomain);
 		}
-		List<ConnectorPartition> partitions = ImmutableList
-				.<ConnectorPartition> of(new ProteumPartition(
-						proteumTableHandle.getSchemaName(), proteumTableHandle
-								.getTableName(), columnFilters));
-		return new ConnectorPartitionResult(partitions, tupleDomain);
 	}
 
 	@Override
