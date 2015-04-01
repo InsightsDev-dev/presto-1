@@ -1,12 +1,9 @@
 MOBILIUM_HOME=/opt/mobileum
 if [[  -z $2 ]] ; then 
-  echo "Compiling to default directory /opt/mobileum"
   MOBILIUM_HOME='/opt/mobileum' 
 else
-  echo "using directory $2" 
   MOBILIUM_HOME=$2 
 fi
-
 
 if [ $1 != "-Pdev" ]  && [ $1 != "-Pprod" ]
 then
@@ -20,9 +17,6 @@ if [ $? -ne 0 ]
 then 
         exit 10
 fi
-
-
-
 
 ##temporary fix for copying jars according to profile
 if [ $1 == "-Pdev" ]
@@ -130,15 +124,3 @@ cp -R presto-server/target/presto-server-0.82 $MOBILIUM_HOME/
 cp -R presto-server/target/etc $MOBILIUM_HOME/presto-server-0.82/
 cp presto-cli/target/presto-cli-0.82-executable.jar $MOBILIUM_HOME/presto-server-0.82/presto
 chmod +x $MOBILIUM_HOME/presto-server-0.82/presto
-
-
-cd $MOBILIUM_HOME
-rm build-*.tar.gz
-
-timestamp=`date +'%Y%m%d%H%M'`
-if [ "-Pprod" != "$1" ]
-then
-  tar zcf build-$timestamp.tar.gz *
-  else
-    tar zcf build-hdfs2-$timestamp.tar.gz *
-fi
