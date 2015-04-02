@@ -14,6 +14,7 @@
 package com.facebook.presto.connector.proteum;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
@@ -27,6 +28,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.ZooKeeper;
+
 import com.facebook.presto.spi.ColumnMetadata;
 import com.facebook.presto.spi.type.BigintType;
 import com.facebook.presto.spi.type.DoubleType;
@@ -36,19 +41,38 @@ import com.google.common.collect.Lists;
 import com.google.inject.Inject;
 import com.mobileum.range.presto.TSRangeType;
 
-public class ProteumClient {
+public class ProteumClient implements Watcher, Runnable, DataMonitor.DataMonitorListener {
 	private String baseURL;
 	private ProteumConfig config;
+	
+	DataMonitor dm;
 
+	ZooKeeper zk;
+
+	private static final String znode = "/proteum_driver_hostname";
 	@Inject
 	public ProteumClient(ProteumConfig config) {
-	    this.config = config;
-		initializeClient();
+		this.config = config;
+		if(this.config.getUseZooKeeper()){
+			try {
+				zk = new ZooKeeper(this.config.getZooKeeperConnectionString(), 3000, this, true);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+	        dm = new DataMonitor(zk, znode, null, this);
+		}else{
+			initializeClient();
+		}
+	}
+	
+	public ProteumConfig getConfig() {
+		return config;
 	}
 	public void initializeClient(){
 	    tables = new HashMap<String, Map<String, ProteumTable>>();
-        String baseURL = config.intializeAndGetProteumServerURL();
+        String baseURL = config.getProteumUrl();
         this.baseURL = baseURL;
+        System.out.println("initlaizing client using ="+this.baseURL);
         try {
             URL url = new URL(baseURL + "/list");
             HttpURLConnection connection = (HttpURLConnection) url
@@ -60,6 +84,7 @@ public class ProteumClient {
                     connection.getInputStream()));
             String inputLine;
             while ((inputLine = in.readLine()) != null) {
+            	System.out.println(inputLine);
                 addTable(inputLine);
             }
         } catch (Exception e) {
@@ -67,11 +92,7 @@ public class ProteumClient {
             System.out.println(e.getMessage());
         }
 	}
-	public void reinitializeClient(){
-	    config.resetActiveURL();
-	    initializeClient();
-	}
-
+	
 	public String getBaseURL() {
 		return this.baseURL;
 	}
@@ -148,4 +169,39 @@ public class ProteumClient {
 		tables.get(database).put(tableName, pTable);
 	}
 
+	  @Override
+		public void process(WatchedEvent event) {
+	    	dm.process(event);
+	    }
+
+	    @Override
+		public void run() {
+	        try {
+	            synchronized (this) {
+	                while (!dm.dead) {
+	                    wait();
+	                }
+	            }
+	        } catch (InterruptedException e) {
+	        }
+	    }
+
+	    @Override
+		public void closing(int rc) {
+	        synchronized (this) {
+	            notifyAll();
+	        }
+	    }
+
+	    @Override
+		public void exists(byte[] data) {
+	        if (data == null) {
+	            System.out.println("data is null");
+	        } else {
+	        	String connectionString = new String(data);
+	        	System.out.println("connectionString " + connectionString);
+	        	this.config.setProteumConnectionString(new String(data));
+	        	initializeClient();
+	        }
+	    }
 }

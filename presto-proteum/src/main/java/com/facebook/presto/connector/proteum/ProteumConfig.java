@@ -24,11 +24,10 @@ public class ProteumConfig {
 	private int pluginListerPort = 8360;
 	private int proteumServerPort = 8359;
 	private boolean notApplyFilter = false;
-	private String baseURL = null;
-	private List<String> proteumServerURIs;
-	private boolean isBaseURLIntializationRequired = true;
-	private static final Splitter SPLITTER = Splitter.on(',').trimResults()
-			.omitEmptyStrings();
+	private String proteumConnectionString;
+	private String zooKeeperConnectionString;
+	private String proteumHost;
+	private Boolean useZooKeeper = false;
 
 	@Max(65536)
 	@Min(0)
@@ -40,7 +39,7 @@ public class ProteumConfig {
 	public void setProteumServerPort(int proteumServerPort) {
 		this.proteumServerPort = proteumServerPort;
 	}
-
+	
 	@Max(65536)
 	@Min(0)
 	public Integer getPluginListerPort() {
@@ -61,64 +60,63 @@ public class ProteumConfig {
 	public void setNotApplyFilter(Boolean notApplyFilter) {
 		this.notApplyFilter = notApplyFilter;
 	}
-
-	public List<String> getBaseURL() {
-		return proteumServerURIs;
-	}
 	
-	public void resetActiveURL(){
-	    this.baseURL = null;
-	    this.isBaseURLIntializationRequired = true;
-	}
-
-	public String intializeAndGetProteumServerURL() {
-		if (baseURL == null) {
-			baseURL = initilizeURL();
-		}
-		if (baseURL == null) {
-		    return  "http://" + proteumServerURIs.get(0) + ":" + proteumServerPort;
-		}
-		return baseURL;
-	}
-
 	@Config("proteum.host")
-	public void setBaseURL(String baseURL) {
-		proteumServerURIs = SPLITTER.splitToList(baseURL);
-		if (proteumServerURIs == null || proteumServerURIs.isEmpty()) {
+	public void setProteumHost(String baseURL) {
+		this.proteumHost = baseURL;
+		if (proteumHost == null || proteumHost.isEmpty()) {
 			throw new RuntimeException(
 					"No URL for proteum.host in proteum.properties");
 		}
 	}
-
-	private String initilizeURL() {
-		if (isBaseURLIntializationRequired) {
-			isBaseURLIntializationRequired = false;
-			if (proteumServerURIs.size() == 1) {
-				return "http://" + proteumServerURIs.get(0) + ":" + proteumServerPort;
-			}
-			for (String host : proteumServerURIs) {
-				String tempURL = "http://" + host + ":" + proteumServerPort;
-				HttpURLConnection connection;
-				try {
-					URL myurl = new URL(tempURL);
-					connection = (HttpURLConnection) myurl.openConnection();
-					connection.setConnectTimeout(4 * SECOND);
-					connection.setReadTimeout(SECOND);
-					connection.setRequestMethod("HEAD");
-					int code = connection.getResponseCode();
-					if (code == HttpURLConnection.HTTP_OK) {
-						System.out.println("Proteum Server URL is " + tempURL);
-						return tempURL;
-					}
-				} catch (UnknownHostException e) {
-					throw new RuntimeException(e);
-				} catch (MalformedURLException e) {
-					throw new RuntimeException(e);
-				} catch (Exception e) {
-					System.out.println(e.getMessage() + " for " + tempURL);
-				}
-			}
-		}
-		return null;
+	
+	public String getProteumHost() {
+		return proteumHost;
 	}
+	
+	public void setProteumConnectionString(String proteumConnectionString) {
+		this.proteumConnectionString = proteumConnectionString;
+		if (proteumConnectionString == null || proteumConnectionString.isEmpty()) {
+			throw new RuntimeException(
+					"No URL for proteum.connection.string in proteum.properties");
+		}
+	}
+
+	public String getProteumConnectionString() {
+		return proteumConnectionString;
+	}
+	
+	@Config("use.zookeeper")
+	public void setUseZooKeeper(Boolean useZooKeepr) {
+		if(useZooKeepr == null){
+			return;
+		}
+		this.useZooKeeper  = useZooKeepr;
+	}
+	
+	public boolean getUseZooKeeper(){
+		return useZooKeeper;
+	}
+	@Config("zookeeper.connection.string")
+	public void setZooKeeperConnectionString(String zooKeeperConnectionString) {
+		this.zooKeeperConnectionString = zooKeeperConnectionString;
+		if (zooKeeperConnectionString == null || zooKeeperConnectionString.isEmpty()) {
+			System.err.println("zookeeper.connection.string is not correctly specified in proteum.properties");
+		}
+	}
+	
+	public String getZooKeeperConnectionString(){
+		return this.zooKeeperConnectionString;
+	}
+
+	public String getProteumUrl() {
+		// TODO Auto-generated method stub
+		if(useZooKeeper)
+			return "http://"+this.proteumConnectionString;
+		else{
+			return "http://" + this.proteumHost +":"+ this.proteumServerPort;
+		}
+	}
+
+	
 }
