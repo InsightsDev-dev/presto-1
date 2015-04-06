@@ -69,7 +69,7 @@ public class ProteumRecordCursor implements RecordCursor {
 		}
 		try {
 			String path = url.toString() + "?";
-			String queryParameters = buildColumnURL(columnHandles) + ":";
+			String queryParameters = buildColumnURL(columnHandles) + "---";
 			queryParameters += buildFilterURL(filters);
 			try {
 				url = new URL(path

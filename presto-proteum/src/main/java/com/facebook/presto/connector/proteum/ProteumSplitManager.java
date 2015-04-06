@@ -30,11 +30,13 @@ import com.facebook.presto.spi.Domain;
 import com.facebook.presto.spi.FixedSplitSource;
 import com.facebook.presto.spi.TupleDomain;
 import com.facebook.presto.sql.planner.optimizations.ProteumTupleDomain;
+import com.facebook.presto.sql.tree.BooleanLiteral;
 import com.facebook.presto.sql.tree.Expression;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.inject.Inject;
 import com.google.inject.name.Named;
+import com.mobileum.range.presto.ExpressionFormatter;
 
 public class ProteumSplitManager implements ConnectorSplitManager {
 	private final String connectorId;
@@ -50,9 +52,11 @@ public class ProteumSplitManager implements ConnectorSplitManager {
 	}
 
 	public static Expression fromPredicate(Expression expression) {
-		return new com.mobileum.range.presto.RewritingVisitor<Void>().process(
-				expression, new com.mobileum.range.presto.Context<Void>(null,
-						false));
+		Expression e = new com.mobileum.range.presto.RewritingVisitor<Void>()
+				.process(
+						expression,
+						new com.mobileum.range.presto.Context<Void>(null, false));
+		return com.mobileum.range.presto.RewritingVisitor.handleBoolean(e);
 	}
 
 	@Override
@@ -67,30 +71,37 @@ public class ProteumSplitManager implements ConnectorSplitManager {
 							proteumTableHandle.getTableName(), Lists
 									.<ProteumColumnFilter> newArrayList()));
 			return new ConnectorPartitionResult(partitions, tupleDomain);
-
-		} else {
-
-			if (tupleDomain instanceof ProteumTupleDomain) {
-				@SuppressWarnings("rawtypes")
-				Expression expression = ((ProteumTupleDomain) tupleDomain)
+		}
+		String str = null;
+		if (tupleDomain instanceof ProteumTupleDomain) {
+			try {
+				Expression expression = ((ProteumTupleDomain<ConnectorColumnHandle>) tupleDomain)
 						.getRemainingExpresstion();
 				Expression expression2 = fromPredicate(expression);
-				// System.out.println(expression2);
+				str = ExpressionFormatter.formatExpression(expression2);
+			} catch (Exception e) {
+				System.out.println("While formatting filters : "
+						+ e.getMessage());
 			}
-			List<ProteumColumnFilter> columnFilters = new ArrayList<ProteumColumnFilter>();
-			for (Entry<ConnectorColumnHandle, Domain> entry : tupleDomain
-					.getDomains().entrySet()) {
-				columnFilters
-						.add(new ProteumColumnFilter(
-								(ProteumColumnHandle) entry.getKey(), entry
-										.getValue()));
-			}
-			List<ConnectorPartition> partitions = ImmutableList
-					.<ConnectorPartition> of(new ProteumPartition(
-							proteumTableHandle.getSchemaName(),
-							proteumTableHandle.getTableName(), columnFilters));
-			return new ConnectorPartitionResult(partitions, tupleDomain);
 		}
+		List<ProteumColumnFilter> columnFilters = new ArrayList<ProteumColumnFilter>();
+		for (Entry<ConnectorColumnHandle, Domain> entry : tupleDomain
+				.getDomains().entrySet()) {
+			columnFilters.add(new ProteumColumnFilter(
+					(ProteumColumnHandle) entry.getKey(), entry.getValue(),
+					null));
+		}
+		if (str != null
+				&& !str.toLowerCase().equals("true")
+				&& !str.equalsIgnoreCase(ExpressionFormatter
+						.formatExpression(BooleanLiteral.TRUE_LITERAL))) {
+			columnFilters.add(new ProteumColumnFilter(null, null, str));
+		}
+		List<ConnectorPartition> partitions = ImmutableList
+				.<ConnectorPartition> of(new ProteumPartition(
+						proteumTableHandle.getSchemaName(), proteumTableHandle
+								.getTableName(), columnFilters));
+		return new ConnectorPartitionResult(partitions, tupleDomain);
 	}
 
 	@Override

@@ -12,16 +12,16 @@ import io.airlift.slice.Slices;
 public class TimeStampRange
         extends Range<TimeStamp>
 {
-    public static final TimeStampRange emptyRange = new TimeStampRange(null, null, true);
+    public static final TimeStampRange emptyRange = new TimeStampRange();
 
     public TimeStampRange(RangeBound<TimeStamp> lower, RangeBound<TimeStamp> upper, byte flags)
     {
         super(lower, upper, flags);
     }
 
-    public TimeStampRange(RangeBound<TimeStamp> lower, RangeBound<TimeStamp> upper, boolean isEmpty)
+    public TimeStampRange()
     {
-        super(lower, upper, isEmpty);
+        super();
     }
 
     @Override

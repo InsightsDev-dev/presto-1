@@ -18,6 +18,8 @@ import io.airlift.slice.Slice;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.annotation.Nullable;
+
 import com.facebook.presto.spi.Domain;
 import com.facebook.presto.spi.Marker;
 import com.facebook.presto.spi.Range;
@@ -26,37 +28,50 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Joiner;
 
 public class ProteumColumnFilter {
-    private final ProteumColumnHandle columnHandle;
-    private List<String> ranges;
-    private final Domain domain;
+	private final ProteumColumnHandle columnHandle;
+	private List<String> ranges;
+	private final Domain domain;
+	private final String remainingExpression;
 
-    @JsonCreator
-    public ProteumColumnFilter(@JsonProperty("columnHandle")ProteumColumnHandle columnHandle,
-            @JsonProperty("domain")Domain domain){
-        this.domain = domain;
-        this.columnHandle = columnHandle;
-        ranges = new ArrayList<String>();
-    }
+	@JsonCreator
+	public ProteumColumnFilter(
+			@JsonProperty("columnHandle") ProteumColumnHandle columnHandle,
+			@JsonProperty("domain") Domain domain,
+			@Nullable @JsonProperty("remainingExpression") String remainingExpression) {
+		this.domain = domain;
+		this.columnHandle = columnHandle;
+		ranges = new ArrayList<String>();
+		this.remainingExpression = remainingExpression;
+	}
 
-    private String getStringValue(Marker marker){
-        Object value = marker.getValue();
-        if(value instanceof Slice){
+	private String getStringValue(Marker marker) {
+		Object value = marker.getValue();
+		if (value instanceof Slice) {
 			return "'" + new String(((Slice) value).getBytes()) + "'";
-        }
-        else return value.toString();
-    }
+		} else
+			return value.toString();
+	}
 
-    @JsonProperty
-    public Domain getDomain(){
-        return this.domain;
-    }
-    @JsonProperty
-    public ProteumColumnHandle getColumnHandle(){
-        return this.columnHandle;
-    }
+	@JsonProperty
+	public Domain getDomain() {
+		return this.domain;
+	}
 
-    @Override
-    public String toString() {
+	@JsonProperty
+	public ProteumColumnHandle getColumnHandle() {
+		return this.columnHandle;
+	}
+
+	@JsonProperty
+	public String getRemainingExpression() {
+		return remainingExpression;
+	}
+
+	@Override
+	public String toString() {
+		if (remainingExpression != null && remainingExpression.length() > 0) {
+			return remainingExpression.toString();
+		}
 		StringBuilder sb = new StringBuilder();
 		int domainNum = 1;
 		int numOfDomains = domain.getRanges().getRangeCount();
@@ -88,9 +103,11 @@ public class ProteumColumnFilter {
 				sb.append(columnName);
 				sb.append("=");
 				sb.append(getStringValue(range.getLow()));
-			} else if (range.getLow().isLowerUnbounded() || range.getHigh().isUpperUnbounded()) {
+			} else if (range.getLow().isLowerUnbounded()
+					|| range.getHigh().isUpperUnbounded()) {
 				// filter corresponds to <=, <
-				if (range.getLow().isLowerUnbounded() && range.getHigh().getBound() == Marker.Bound.EXACTLY) {
+				if (range.getLow().isLowerUnbounded()
+						&& range.getHigh().getBound() == Marker.Bound.EXACTLY) {
 					sb.append(columnName);
 					sb.append(" ");
 					sb.append("<=");
@@ -104,7 +121,8 @@ public class ProteumColumnFilter {
 					sb.append(getStringValue(range.getHigh()));
 				}
 				// filter corresponds to >=, >
-				if (range.getHigh().isUpperUnbounded() && range.getLow().getBound() == Marker.Bound.EXACTLY) {
+				if (range.getHigh().isUpperUnbounded()
+						&& range.getLow().getBound() == Marker.Bound.EXACTLY) {
 					sb.append(columnName);
 					sb.append(" ");
 					sb.append(">=");
@@ -117,8 +135,7 @@ public class ProteumColumnFilter {
 					sb.append(" ");
 					sb.append(getStringValue(range.getLow()));
 				}
-			} 
-			else {
+			} else {
 				// bounded range filters
 				sb.append(columnName);
 				sb.append(" ");

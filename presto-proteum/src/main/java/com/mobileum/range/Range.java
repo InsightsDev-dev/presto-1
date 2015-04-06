@@ -63,7 +63,7 @@ public abstract class Range<T extends Comparable<T>>
         this.isPoint = true;
     }
 
-    public Range(RangeBound<T> lower, RangeBound<T> upper, boolean isEmpty)
+    public Range()
     {
         this.lower = this.upper = null;
         // this.isEmpty = isEmpty;

@@ -12,16 +12,16 @@ import io.airlift.slice.Slices;
 public class TimeStampWithTimeZoneRange
         extends Range<TimeStampWithTimeZone>
 {
-    public static final TimeStampWithTimeZoneRange emptyRange = new TimeStampWithTimeZoneRange(null, null, true);
+    public static final TimeStampWithTimeZoneRange emptyRange = new TimeStampWithTimeZoneRange();
 
     public TimeStampWithTimeZoneRange(RangeBound<TimeStampWithTimeZone> lower, RangeBound<TimeStampWithTimeZone> upper, byte flags)
     {
         super(lower, upper, flags);
     }
 
-    public TimeStampWithTimeZoneRange(RangeBound<TimeStampWithTimeZone> lower, RangeBound<TimeStampWithTimeZone> upper, boolean isEmpty)
+    public TimeStampWithTimeZoneRange()
     {
-        super(lower, upper, isEmpty);
+        super();
     }
 
     @Override

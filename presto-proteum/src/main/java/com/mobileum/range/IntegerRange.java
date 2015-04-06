@@ -12,16 +12,16 @@ import io.airlift.slice.Slices;
 public class IntegerRange
         extends Range<Integer>
 {
-    public static IntegerRange emptyRange = new IntegerRange(null, null, true);
+    public static IntegerRange emptyRange = new IntegerRange();
 
     public IntegerRange(RangeBound<Integer> lower, RangeBound<Integer> upper, byte flags)
     {
         super(lower, upper, flags);
     }
 
-    public IntegerRange(RangeBound<Integer> lower, RangeBound<Integer> upper, boolean isEmpty)
+    public IntegerRange()
     {
-        super(lower, upper, isEmpty);
+        super();
     }
 
     @Override
@@ -84,7 +84,7 @@ public class IntegerRange
     @Override
     public final Range<Integer> getEmptyRange()
     {
-        return new IntegerRange(null, null, true);
+        return new IntegerRange();
     }
 
 }
