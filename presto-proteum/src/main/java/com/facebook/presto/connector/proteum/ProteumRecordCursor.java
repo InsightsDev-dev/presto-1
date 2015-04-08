@@ -23,6 +23,7 @@ import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
 
 import java.io.BufferedReader;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -30,6 +31,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -67,21 +69,25 @@ public class ProteumRecordCursor implements RecordCursor {
 		for (int i = 0; i < columnHandles.size(); i++) {
 			fieldToColumnIndex[i] = i;
 		}
+		BufferedReader in = null;
 		try {
 			String path = url.toString() + "?";
-			String queryParameters = buildColumnURL(columnHandles) + "---";
+			String queryParameters = buildColumnURL(columnHandles) + "&";
 			queryParameters += buildFilterURL(filters);
-			try {
-				url = new URL(path
-						+ URLEncoder.encode(queryParameters, "UTF-8"));
-			} catch (UnsupportedEncodingException e) {
-				throw new RuntimeException(e);
-			}
+			byte[] postData = queryParameters.getBytes(StandardCharsets.UTF_8);
 			HttpURLConnection connection = (HttpURLConnection) url
 					.openConnection();
-			connection.setRequestMethod("GET");
-			connection.connect();
-			BufferedReader in = new BufferedReader(new InputStreamReader(
+			connection.setRequestMethod("POST");
+			connection.setRequestProperty("Content-Length", ""
+					+ postData.length);
+			connection.setUseCaches(false);
+			connection.setDoInput(true);
+			connection.setDoOutput(true);
+			try (DataOutputStream wr = new DataOutputStream(
+					connection.getOutputStream())) {
+				wr.write(postData);
+			}
+			in = new BufferedReader(new InputStreamReader(
 					connection.getInputStream()));
 			String inputLine;
 			List<String> tempLines = new ArrayList<String>();
@@ -94,6 +100,14 @@ public class ProteumRecordCursor implements RecordCursor {
 			totalBytes = length;
 		} catch (Exception e) {
 			throw new RuntimeException(e);
+		} finally {
+			if (in != null) {
+				try {
+					in.close();
+				} catch (IOException e) {
+					System.out.println(e.getMessage());
+				}
+			}
 		}
 
 	}
@@ -102,12 +116,25 @@ public class ProteumRecordCursor implements RecordCursor {
 		List<String> columnsName = new ArrayList<String>();
 		for (ProteumColumnHandle column : columns)
 			columnsName.add(column.getColumnName());
-		return "columns={" + Joiner.on(",").join(columnsName) + "}";
+		try {
+			return "columns="
+					+ URLEncoder.encode(Joiner.on(",").join(columnsName),
+							"UTF-8");
+		} catch (UnsupportedEncodingException e) {
+			System.out.println("ERROR for encoding column" + e.getMessage());
+			return "columns=";
+		}
 	}
 
 	private String buildFilterURL(List<ProteumColumnFilter> filters) {
 
-		return "filters={" + Joiner.on("&&").join(filters) + "}";
+		try {
+			return "filters="
+					+ URLEncoder.encode(Joiner.on("&&").join(filters), "UTF-8");
+		} catch (UnsupportedEncodingException e) {
+			System.out.println("ERROR for encoding filter " + e.getMessage());
+			return "columns=";
+		}
 	}
 
 	@Override
