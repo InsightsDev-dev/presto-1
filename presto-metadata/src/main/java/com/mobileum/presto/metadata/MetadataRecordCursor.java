@@ -126,8 +126,10 @@ public class MetadataRecordCursor implements RecordCursor {
 	@Override
 	public Slice getSlice(int field) {
 		if (getType(field).equals(HyperLogLogType.HYPER_LOG_LOG)) {
-			return com.mobileum.common.analytics.cardinality.HyperLogLog
-					.deserialize(getFieldValue(field)).serialize();
+			return Slices
+					.wrappedBuffer(com.mobileum.common.analytics.cardinality.HyperLogLog
+							.deserialize(getFieldValue(field)).serialize()
+							.getBytes());
 		} else {
 			checkFieldType(field, VARCHAR);
 			return Slices.utf8Slice(getFieldValue(field));
