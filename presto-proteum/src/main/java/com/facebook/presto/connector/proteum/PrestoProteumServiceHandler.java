@@ -14,6 +14,7 @@
 package com.facebook.presto.connector.proteum;
 
 import java.io.IOException;
+import java.util.List;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
@@ -50,6 +51,13 @@ public class PrestoProteumServiceHandler extends AbstractHandler {
             System.out.println("handling request = " + target);
             client.initializeClient();
             System.out.println("client initialization done");
+        }
+		if (target.equals("/freeport")) {
+		    List<Integer> listenQueue = client.getListenPortQueue();
+            arg3.getWriter().println(listenQueue.size());
+            for(Integer i : listenQueue){
+                arg3.getWriter().println(i);
+            }
         }
 	}
 

@@ -29,6 +29,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.Socket;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
@@ -60,9 +62,11 @@ public class ProteumRecordCursor implements RecordCursor {
 	private final long totalBytes;
 
 	private List<String> fields;
+	
 
 	public ProteumRecordCursor(List<ProteumColumnHandle> columnHandles,
 			URL url, List<ProteumColumnFilter> filters) {
+	    final int listenPort = ProteumClient.getListenPort();
 		this.columnHandles = columnHandles;
 
 		fieldToColumnIndex = new int[columnHandles.size()];
@@ -71,10 +75,19 @@ public class ProteumRecordCursor implements RecordCursor {
 		}
 		BufferedReader in = null;
 		try {
+		    ProteumScanThread scanThread = new ProteumScanThread(listenPort);
+		    scanThread.setPriority(10);
+		    scanThread.start();
+		    while(!scanThread.isSocketAccepting()){
+		        Thread.sleep(5);
+		    }
 			String path = url.toString() + "?";
 			String queryParameters = buildColumnURL(columnHandles) + "&";
-			queryParameters += buildFilterURL(filters);
+			queryParameters += buildFilterURL(filters)+"&";
+			queryParameters+="port="+listenPort+"&";
+            queryParameters+="host="+InetAddress.getLocalHost().getHostName();
 			byte[] postData = queryParameters.getBytes(StandardCharsets.UTF_8);
+
 			HttpURLConnection connection = (HttpURLConnection) url
 					.openConnection();
 			connection.setRequestMethod("POST");
@@ -90,14 +103,14 @@ public class ProteumRecordCursor implements RecordCursor {
 			in = new BufferedReader(new InputStreamReader(
 					connection.getInputStream()));
 			String inputLine;
+			while ((inputLine = in.readLine()) != null) {
+			}
 			List<String> tempLines = new ArrayList<String>();
 			int length = 0;
-			while ((inputLine = in.readLine()) != null) {
-				tempLines.add(inputLine);
-				length += inputLine.length();
-			}
-			lines = tempLines.iterator();
-			totalBytes = length;
+			scanThread.setFinished(true);
+			
+			lines = scanThread.getData().iterator();
+			totalBytes = scanThread.getSize();
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		} finally {

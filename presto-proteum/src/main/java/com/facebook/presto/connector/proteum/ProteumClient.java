@@ -17,16 +17,21 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
+import java.net.ServerSocket;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
@@ -48,6 +53,12 @@ public class ProteumClient implements Watcher, Runnable, DataMonitor.DataMonitor
 	DataMonitor dm;
 
 	ZooKeeper zk;
+	private static Queue<Integer> listenPort = new LinkedList<Integer>();
+	private static Map<Integer, ServerSocket> socketMap = new ConcurrentHashMap<Integer, ServerSocket>();
+	private static List<Integer> freePort = new ArrayList<Integer>();
+	private static final int PORT_START = 10001;
+	private static final int PORT_POOL_SIZE = 1000;
+	private static Boolean portMaintainanceRunning = false;
 
 	private static final String znode = "/proteum_driver_hostname";
 	@Inject
@@ -63,10 +74,84 @@ public class ProteumClient implements Watcher, Runnable, DataMonitor.DataMonitor
 		}else{
 			initializeClient();
 		}
+		for(int i = PORT_START ; i < PORT_START + PORT_POOL_SIZE ; i++){
+		    try{
+		        ServerSocket serverSocket = new ServerSocket();
+		        serverSocket.setReceiveBufferSize(1096304000);
+		        serverSocket.setReuseAddress(true);
+		        serverSocket.bind(new InetSocketAddress(i));
+		        socketMap.put(i, serverSocket);
+		        listenPort.add(i);
+		    }
+		    catch(Exception e){
+		        e.printStackTrace();
+		    }
+		}
 	}
 	
 	public ProteumConfig getConfig() {
 		return config;
+	}
+	public static void addFreePort(int port){
+	    synchronized (freePort) {
+            freePort.add(port);
+        }
+	}
+	
+	public static void triggerPortMaintainance(){
+	    if(freePort.size() < PORT_POOL_SIZE/2) return;
+	    synchronized (portMaintainanceRunning) {
+	        if(freePort.size() < PORT_POOL_SIZE/2) return;
+	        addFreePortToListenPort();
+        }
+	}
+	
+	public static void addFreePortToListenPort(){
+	    List<Integer> addedPort = new ArrayList<Integer>();
+	    synchronized (freePort) {
+	        synchronized (listenPort) {
+                for(Integer port : freePort){
+                    try{
+                        ServerSocket serverSocket = new ServerSocket();
+                        serverSocket.setReceiveBufferSize(1096304000);
+                        serverSocket.setReuseAddress(true);
+                        serverSocket.bind(new InetSocketAddress(port));
+                        socketMap.put(port, serverSocket);
+                        listenPort.add(port);
+                        addedPort.add(port);
+                    }
+                    catch(Exception e){
+                        e.printStackTrace();
+                    }
+                }
+                for(Integer port : addedPort){
+                    freePort.remove(port);
+                }
+            }
+        }
+	}
+	
+	public static ServerSocket getServerSocket(int port){
+	    return socketMap.get(port);
+	}
+	public static int getListenPort(){
+	    synchronized (listenPort) {
+	        if(listenPort.peek() == null){
+	            addFreePortToListenPort();
+	        }
+            int port = listenPort.poll();
+            return port;
+        }
+	}
+	
+	public List<Integer> getListenPortQueue(){
+	    return new ArrayList<Integer>(listenPort);
+	}
+	
+	public static void addListenPort(int port){
+	    synchronized (listenPort) {
+            listenPort.add(port);
+        }
 	}
 	public void initializeClient(){
 	    tables = new HashMap<String, Map<String, ProteumTable>>();
