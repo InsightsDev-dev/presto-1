@@ -75,7 +75,7 @@ public class TestQueriesUtils {
 		assertEqualsQueryQuery("select * from customer where num>5 AND num<3900 "
 				+ "OR (num >4000 AND num < 4005) OR str not like '% %'"
 				+ orderByCustomer);
-		assertEqualsQueryQuery("select * from customer where num>5 AND num<3900 OR NOT(num >4000 AND num < 4005)");
+		assertEqualsQueryQuery("select * from customer where num>5 AND num<3900 OR NOT(num >4000 AND num < 4005)"+ orderByCustomer);
 		assertEqualsQueryQuery("select * from customer where NOT num>5 AND "
 				+ "num<3900 OR NOT (num >4000 AND num < 4905) OR str not like '%A%'"
 				+ orderByCustomer);

@@ -81,7 +81,7 @@ public class ProteumMetadata extends ReadOnlyConnectorMetadata {
 	public List<SchemaTableName> listTables(ConnectorSession session,
 			String schemaNameOrNull) {
 		if (schemaNameOrNull == null)
-			return null;
+			schemaNameOrNull = "default";
 		Set<String> tableNames = client.getTableNames(schemaNameOrNull);
 		if (tableNames == null)
 			return null;
