@@ -28,7 +28,9 @@ cp ~/.m2/repository/org/slf4j/slf4j-api/1.7.5/slf4j-api-1.7.5.jar presto-server/
 cp ~/.m2/repository/net/sf/kosmosfs/kfs/0.3/kfs-0.3.jar presto-server/target/presto-server-0.82/plugin/metadata/
 cp ~/.m2/repository/org/apache/commons/commons-math/2.1/commons-math-2.1.jar presto-server/target/presto-server-0.82/plugin/metadata/
 cp ~/.m2/repository/org/antlr/ST4/4.0.4/ST4-4.0.4.jar presto-server/target/presto-server-0.82/plugin/metadata/
-cp ~/.m2/repository/com/mobileum/common/3.0-SNAPSHOT/common-3.0-SNAPSHOT.jar presto-server/target/presto-server-0.82/plugin/metadata/
+cp ~/.m2/repository/com/mobileum/common-mobileum/4.0/common-mobileum-4.0.jar presto-server/target/presto-server-0.82/plugin/metadata/
+cp ~/.m2/repository/com/mobileum/hdfs-mobileum/4.0/hdfs-mobileum-4.0.jar presto-server/target/presto-server-0.82/plugin/metadata/
+cp ~/.m2/repository/com/mobileum/hbase-mobileum/4.0/hbase-mobileum-4.0.jar presto-server/target/presto-server-0.82/plugin/metadata/
 cp ~/.m2/repository/org/antlr/antlr-runtime/3.4/antlr-runtime-3.4.jar presto-server/target/presto-server-0.82/plugin/metadata/
 cp ~/.m2/repository/commons-digester/commons-digester/1.8/commons-digester-1.8.jar presto-server/target/presto-server-0.82/plugin/metadata/
 cp ~/.m2/repository/org/codehaus/jackson/jackson-xc/1.7.1/jackson-xc-1.7.1.jar presto-server/target/presto-server-0.82/plugin/metadata/
@@ -70,7 +72,9 @@ cp ~/.m2/repository/org/slf4j/slf4j-api/1.7.5/slf4j-api-1.7.5.jar presto-server/
 cp ~/.m2/repository/net/sf/kosmosfs/kfs/0.3/kfs-0.3.jar presto-server/target/presto-server-0.82/plugin/metadata/
 cp ~/.m2/repository/org/apache/commons/commons-math/2.1/commons-math-2.1.jar presto-server/target/presto-server-0.82/plugin/metadata/
 cp ~/.m2/repository/org/antlr/ST4/4.0.4/ST4-4.0.4.jar presto-server/target/presto-server-0.82/plugin/metadata/
-cp ~/.m2/repository/com/mobileum/common/3.0-SNAPSHOT/common-3.0-SNAPSHOT-hdfs2.jar presto-server/target/presto-server-0.82/plugin/metadata/
+cp ~/.m2/repository/com/mobileum/common-mobileum/4.0/common-mobileum-4.0.jar presto-server/target/presto-server-0.82/plugin/metadata/
+cp ~/.m2/repository/com/mobileum/hdfs-mobileum/4.0/hdfs-mobileum-4.0.jar presto-server/target/presto-server-0.82/plugin/metadata/
+cp ~/.m2/repository/com/mobileum/hbase-mobileum/4.0/hbase-mobileum-4.0.jar presto-server/target/presto-server-0.82/plugin/metadata/
 cp ~/.m2/repository/org/antlr/antlr-runtime/3.4/antlr-runtime-3.4.jar presto-server/target/presto-server-0.82/plugin/metadata/
 cp ~/.m2/repository/commons-digester/commons-digester/1.8/commons-digester-1.8.jar presto-server/target/presto-server-0.82/plugin/metadata/
 cp ~/.m2/repository/org/codehaus/jackson/jackson-mapper-asl/1.8.8/jackson-mapper-asl-1.8.8.jar presto-server/target/presto-server-0.82/plugin/metadata/
