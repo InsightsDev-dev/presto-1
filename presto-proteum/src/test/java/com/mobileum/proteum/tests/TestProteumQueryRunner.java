@@ -38,6 +38,7 @@ public final class TestProteumQueryRunner {
 			properties.put("proteum.host", "localhost");
 			properties.put("proteum.port", "8359");
 			properties.put("proteum-plugin.port", "8365");
+			properties.put("proteum-plugin.start.port", "13001");
 			defaultQueryRunner.installPlugin(new ProteumPlugin());
 			defaultQueryRunner.createCatalog("proteum", "proteum", properties);
 			return defaultQueryRunner;
@@ -62,7 +63,8 @@ public final class TestProteumQueryRunner {
 			properties.put("proteum.host", "localhost");
 			properties.put("proteum.port", "8359");
 			properties.put("proteum-plugin.port", "8366");
-			properties.put("proteum.not.apply.filter", "true");
+			properties.put("proteum.apply.filter", "false");
+			properties.put("proteum-plugin.start.port", "12001");
 			noFilterQueryRunner.installPlugin(new ProteumPlugin());
 			noFilterQueryRunner.createCatalog("proteum", "proteum", properties);
 			return noFilterQueryRunner;

@@ -48,17 +48,24 @@ public class PrestoProteumServiceHandler extends AbstractHandler {
 			}
 		}
 		if (target.equals("/initialize")) {
-            System.out.println("handling request = " + target);
-            client.initializeClient();
-            System.out.println("client initialization done");
-        }
+			System.out.println("handling request = " + target);
+			client.initializeClient();
+			System.out.println("client initialization done");
+		}
 		if (target.equals("/freeport")) {
-		    List<Integer> listenQueue = client.getListenPortQueue();
-            arg3.getWriter().println(listenQueue.size());
-            for(Integer i : listenQueue){
-                arg3.getWriter().println(i);
-            }
-        }
+			List<Integer> listenQueue = client.getListenPortQueue();
+			arg3.getWriter().println(listenQueue.size());
+			for (Integer i : listenQueue) {
+				arg3.getWriter().println(i);
+			}
+		}
+		if (target.equals("/toogle")) {
+			client.getConfig().setApplyGroupBy(
+					!client.getConfig().getApplyGroupBy());
+			arg3.getWriter().println(
+					"Current Value of " + "protrum.apply.groupby is "
+							+ client.getConfig().getApplyGroupBy());
+		}
 	}
 
 }

@@ -77,7 +77,19 @@ public final class ExpressionFormatter {
 	private ExpressionFormatter() {
 	}
 
+	static ComparisonExpression TRUE = new ComparisonExpression(
+			ComparisonExpression.Type.EQUAL, new LongLiteral("1"),
+			new LongLiteral("1"));
+	static ComparisonExpression FALSE = new ComparisonExpression(
+			ComparisonExpression.Type.EQUAL, new LongLiteral("1"),
+			new LongLiteral("2"));
+
 	public static String formatExpression(Expression expression) {
+		if (expression.equals(BooleanLiteral.TRUE_LITERAL)) {
+			return new Formatter().process(ExpressionFormatter.TRUE, null);
+		} else if (expression.equals(BooleanLiteral.FALSE_LITERAL)) {
+			return new Formatter().process(ExpressionFormatter.FALSE, null);
+		}
 		return new Formatter().process(expression, null);
 	}
 
@@ -111,11 +123,9 @@ public final class ExpressionFormatter {
 				} catch (Exception e) {
 
 				}
-				if(leftString==null && rightString==null){
+				if (leftString == null && rightString == null) {
 					throw new UnsupportedOperationException();
-				}
-				else
-				if (leftString != null && rightString == null) {
+				} else if (leftString != null && rightString == null) {
 					return '(' + leftString + ')';
 				} else if (leftString == null && rightString != null) {
 					return '(' + rightString + ')';
@@ -231,13 +241,6 @@ public final class ExpressionFormatter {
 
 		Cast TRUE_CAST = new Cast(new StringLiteral("true"), "Boolean");
 		Cast FALSE_CAST = new Cast(new StringLiteral("false"), "Boolean");
-
-		ComparisonExpression TRUE = new ComparisonExpression(
-				ComparisonExpression.Type.EQUAL, new LongLiteral("1"),
-				new LongLiteral("1"));
-		ComparisonExpression FALSE = new ComparisonExpression(
-				ComparisonExpression.Type.EQUAL, new LongLiteral("1"),
-				new LongLiteral("2"));
 
 		@Override
 		protected String visitStringLiteral(StringLiteral node, Void context) {

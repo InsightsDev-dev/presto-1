@@ -20,6 +20,8 @@ import com.facebook.presto.sql.analyzer.FeaturesConfig;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.optimizations.CanonicalizeExpressions;
 import com.facebook.presto.sql.planner.optimizations.CountConstantOptimizer;
+import com.facebook.presto.sql.planner.optimizations.CustomizedPredicatePushDown;
+import com.facebook.presto.sql.planner.optimizations.CustomizedPredicatePushDownContext;
 import com.facebook.presto.sql.planner.optimizations.ImplementSampleAsFilter;
 import com.facebook.presto.sql.planner.optimizations.IndexJoinOptimizer;
 import com.facebook.presto.sql.planner.optimizations.LimitPushDown;
@@ -49,7 +51,6 @@ public class PlanOptimizersFactory
     public PlanOptimizersFactory(Metadata metadata, SqlParser sqlParser, SplitManager splitManager, IndexManager indexManager, FeaturesConfig featuresConfig)
     {
         ImmutableList.Builder<PlanOptimizer> builder = ImmutableList.builder();
-
         builder.add(new ImplementSampleAsFilter(),
                 new CanonicalizeExpressions(),
                 new SimplifyExpressions(metadata, sqlParser),
@@ -57,8 +58,8 @@ public class PlanOptimizersFactory
                 new PruneRedundantProjections(),
                 new SetFlatteningOptimizer(),
                 new LimitPushDown(), // Run the LimitPushDown after flattening set operators to make it easier to do the set flattening
-                new PredicatePushDown(metadata, sqlParser, splitManager, featuresConfig.isExperimentalSyntaxEnabled()),
-                new PredicatePushDown(metadata, sqlParser, splitManager, featuresConfig.isExperimentalSyntaxEnabled()), // Run predicate push down one more time in case we can leverage new information from generated partitions
+                new CustomizedPredicatePushDown(metadata, sqlParser, splitManager, featuresConfig.isExperimentalSyntaxEnabled()),
+                new CustomizedPredicatePushDown(metadata, sqlParser, splitManager, featuresConfig.isExperimentalSyntaxEnabled()), // Run predicate push down one more time in case we can leverage new information from generated partitions
                 new MergeProjections(),
                 new SimplifyExpressions(metadata, sqlParser), // Re-run the SimplifyExpressions to simplify any recomposed expressions from other optimizations
                 new UnaliasSymbolReferences(), // Run again because predicate pushdown might add more projections

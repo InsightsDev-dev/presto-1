@@ -41,6 +41,8 @@ import java.util.List;
 
 import com.facebook.presto.spi.RecordCursor;
 import com.facebook.presto.spi.type.Type;
+import com.facebook.presto.sql.planner.Symbol;
+import com.facebook.presto.sql.tree.Expression;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
@@ -62,11 +64,10 @@ public class ProteumRecordCursor implements RecordCursor {
 	private final long totalBytes;
 
 	private List<String> fields;
-	
 
 	public ProteumRecordCursor(List<ProteumColumnHandle> columnHandles,
-			URL url, List<ProteumColumnFilter> filters) {
-	    final int listenPort = ProteumClient.getListenPort();
+			URL url, ProteumPredicatePushDown proteumPredicatePushDown) {
+		final int listenPort = ProteumClient.getListenPort();
 		this.columnHandles = columnHandles;
 
 		fieldToColumnIndex = new int[columnHandles.size()];
@@ -75,19 +76,25 @@ public class ProteumRecordCursor implements RecordCursor {
 		}
 		BufferedReader in = null;
 		try {
-		    ProteumScanThread scanThread = new ProteumScanThread(listenPort);
-		    scanThread.setPriority(10);
-		    scanThread.start();
-		    while(!scanThread.isSocketAccepting()){
-		        Thread.sleep(5);
-		    }
+			ProteumScanThread scanThread = new ProteumScanThread(listenPort);
+			scanThread.setPriority(10);
+			scanThread.start();
+			while (!scanThread.isSocketAccepting()) {
+				Thread.sleep(5);
+			}
 			String path = url.toString() + "?";
-			String queryParameters = buildColumnURL(columnHandles) + "&";
-			queryParameters += buildFilterURL(filters)+"&";
-			queryParameters+="port="+listenPort+"&";
-            queryParameters+="host="+InetAddress.getLocalHost().getHostName();
+			String queryParameters = buildColumnURL(columnHandles);
+			queryParameters += "&"
+					+ buildFilterURL(proteumPredicatePushDown
+							.getColumnFilters());
+			queryParameters += "&"
+					+ buildAggregates(proteumPredicatePushDown.getAggregates());
+			queryParameters += "&"
+					+ buildGroupBy(proteumPredicatePushDown.getGroupBy());
+			queryParameters += "&" + "port=" + listenPort;
+			queryParameters += "&" + "host="
+					+ InetAddress.getLocalHost().getHostName();
 			byte[] postData = queryParameters.getBytes(StandardCharsets.UTF_8);
-
 			HttpURLConnection connection = (HttpURLConnection) url
 					.openConnection();
 			connection.setRequestMethod("POST");
@@ -108,7 +115,7 @@ public class ProteumRecordCursor implements RecordCursor {
 			List<String> tempLines = new ArrayList<String>();
 			int length = 0;
 			scanThread.setFinished(true);
-			
+
 			lines = scanThread.getData().iterator();
 			totalBytes = scanThread.getSize();
 		} catch (Exception e) {
@@ -123,6 +130,36 @@ public class ProteumRecordCursor implements RecordCursor {
 			}
 		}
 
+	}
+
+	private String buildAggregates(List<Expression> aggregates) {
+		String defaultString = "aggregates=";
+		if (aggregates == null || aggregates.isEmpty()) {
+			return defaultString;
+		}
+		try {
+			return "aggregates="
+					+ URLEncoder.encode(Joiner.on(",").join(aggregates),
+							"UTF-8");
+		} catch (UnsupportedEncodingException e) {
+			System.out
+					.println("ERROR for encoding aggregates" + e.getMessage());
+			return defaultString;
+		}
+	}
+
+	private String buildGroupBy(List<Symbol> groupBy) {
+		String defaultString = "groupBy=";
+		if (groupBy == null || groupBy.isEmpty()) {
+			return defaultString;
+		}
+		try {
+			return "groupBy="
+					+ URLEncoder.encode(Joiner.on(",").join(groupBy), "UTF-8");
+		} catch (UnsupportedEncodingException e) {
+			System.out.println("ERROR for encoding groupBy" + e.getMessage());
+			return defaultString;
+		}
 	}
 
 	private String buildColumnURL(List<ProteumColumnHandle> columns) {
@@ -146,7 +183,7 @@ public class ProteumRecordCursor implements RecordCursor {
 					+ URLEncoder.encode(Joiner.on("&&").join(filters), "UTF-8");
 		} catch (UnsupportedEncodingException e) {
 			System.out.println("ERROR for encoding filter " + e.getMessage());
-			return "columns=";
+			return "filters=";
 		}
 	}
 

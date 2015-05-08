@@ -23,11 +23,13 @@ public class ProteumConfig {
 	private static final int SECOND = 1000;
 	private int pluginListerPort = 8360;
 	private int proteumServerPort = 8359;
-	private boolean notApplyFilter = false;
+	private boolean applyFilter = true;
+	private boolean applyGroupBy = false;
 	private String proteumConnectionString;
 	private String zooKeeperConnectionString;
 	private String proteumHost;
 	private Boolean useZooKeeper = false;
+	private int startPort = 10001;
 
 	@Max(65536)
 	@Min(0)
@@ -39,7 +41,7 @@ public class ProteumConfig {
 	public void setProteumServerPort(int proteumServerPort) {
 		this.proteumServerPort = proteumServerPort;
 	}
-	
+
 	@Max(65536)
 	@Min(0)
 	public Integer getPluginListerPort() {
@@ -52,15 +54,25 @@ public class ProteumConfig {
 	}
 
 	@NotNull
-	public boolean getNotApplyFilter() {
-		return notApplyFilter;
+	public boolean getApplyFilter() {
+		return applyFilter;
 	}
 
-	@Config("proteum.not.apply.filter")
-	public void setNotApplyFilter(Boolean notApplyFilter) {
-		this.notApplyFilter = notApplyFilter;
+	@Config("proteum.apply.filter")
+	public void setApplyFilter(boolean applyFilter) {
+		this.applyFilter = applyFilter;
 	}
-	
+
+	@NotNull
+	public boolean getApplyGroupBy() {
+		return applyGroupBy;
+	}
+
+	@Config("proteum.apply.groupby")
+	public void setApplyGroupBy(boolean applyGroupBy) {
+		this.applyGroupBy = applyGroupBy;
+	}
+
 	@Config("proteum.host")
 	public void setProteumHost(String baseURL) {
 		this.proteumHost = baseURL;
@@ -69,14 +81,15 @@ public class ProteumConfig {
 					"No URL for proteum.host in proteum.properties");
 		}
 	}
-	
+
 	public String getProteumHost() {
 		return proteumHost;
 	}
-	
+
 	public void setProteumConnectionString(String proteumConnectionString) {
 		this.proteumConnectionString = proteumConnectionString;
-		if (proteumConnectionString == null || proteumConnectionString.isEmpty()) {
+		if (proteumConnectionString == null
+				|| proteumConnectionString.isEmpty()) {
 			throw new RuntimeException(
 					"No URL for proteum.connection.string in proteum.properties");
 		}
@@ -85,38 +98,51 @@ public class ProteumConfig {
 	public String getProteumConnectionString() {
 		return proteumConnectionString;
 	}
-	
+
 	@Config("use.zookeeper")
 	public void setUseZooKeeper(Boolean useZooKeepr) {
-		if(useZooKeepr == null){
+		if (useZooKeepr == null) {
 			return;
 		}
-		this.useZooKeeper  = useZooKeepr;
+		this.useZooKeeper = useZooKeepr;
 	}
-	
-	public boolean getUseZooKeeper(){
+
+	public boolean getUseZooKeeper() {
 		return useZooKeeper;
 	}
+
 	@Config("zookeeper.connection.string")
 	public void setZooKeeperConnectionString(String zooKeeperConnectionString) {
 		this.zooKeeperConnectionString = zooKeeperConnectionString;
-		if (zooKeeperConnectionString == null || zooKeeperConnectionString.isEmpty()) {
-			System.err.println("zookeeper.connection.string is not correctly specified in proteum.properties");
+		if (zooKeeperConnectionString == null
+				|| zooKeeperConnectionString.isEmpty()) {
+			System.err
+					.println("zookeeper.connection.string is not correctly specified in proteum.properties");
 		}
 	}
-	
-	public String getZooKeeperConnectionString(){
+
+	public String getZooKeeperConnectionString() {
 		return this.zooKeeperConnectionString;
 	}
 
 	public String getProteumUrl() {
 		// TODO Auto-generated method stub
-		if(useZooKeeper)
-			return "http://"+this.proteumConnectionString;
-		else{
-			return "http://" + this.proteumHost +":"+ this.proteumServerPort;
+		if (useZooKeeper)
+			return "http://" + this.proteumConnectionString;
+		else {
+			return "http://" + this.proteumHost + ":" + this.proteumServerPort;
 		}
 	}
 
-	
+	@Max(65536)
+	@Min(0)
+	public int getStartPort() {
+		return startPort;
+	}
+
+	@Config("proteum-plugin.start.port")
+	public void setStartPort(int startPort) {
+		this.startPort = startPort;
+	}
+
 }

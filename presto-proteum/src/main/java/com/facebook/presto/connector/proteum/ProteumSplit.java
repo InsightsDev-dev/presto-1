@@ -25,79 +25,71 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
 
-public class ProteumSplit
-implements ConnectorSplit
-{
-    private final String connectorId;
-    private final String schemaName;
-    private final String tableName;
-    private final URL uri;
-    private final boolean remotelyAccessible;
-    private final ImmutableList<HostAddress> addresses;
-    private final List<ProteumColumnFilter> columnFilters;
+public class ProteumSplit implements ConnectorSplit {
+	private final String connectorId;
+	private final String schemaName;
+	private final String tableName;
+	private final URL uri;
+	private final boolean remotelyAccessible;
+	private final ImmutableList<HostAddress> addresses;
+	private final ProteumPredicatePushDown proteumPredicatePushDown;
 
-    @JsonCreator
-    public ProteumSplit(
-            @JsonProperty("connectorId") String connectorId,
-            @JsonProperty("schemaName") String schemaName,
-            @JsonProperty("tableName") String tableName,
-            @JsonProperty("uri") URL uri,
-            @JsonProperty("columnFilters") List<ProteumColumnFilter> columnFilters)
-    {
-        this.schemaName = checkNotNull(schemaName, "schema name is null");
-        this.connectorId = checkNotNull(connectorId, "connector id is null");
-        this.tableName = checkNotNull(tableName, "table name is null");
-        this.uri = checkNotNull(uri, "uri is null");
-        this.columnFilters = columnFilters;
-        //if ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())) {
-        remotelyAccessible = true;
-        addresses = ImmutableList.of(HostAddress.fromString(uri.getHost()));
-    }
+	@JsonCreator
+	public ProteumSplit(
+			@JsonProperty("connectorId") String connectorId,
+			@JsonProperty("schemaName") String schemaName,
+			@JsonProperty("tableName") String tableName,
+			@JsonProperty("uri") URL uri,
+			@JsonProperty("proteumPredicatePushDown") ProteumPredicatePushDown proteumPredicatePushDown) {
+		this.schemaName = checkNotNull(schemaName, "schema name is null");
+		this.connectorId = checkNotNull(connectorId, "connector id is null");
+		this.tableName = checkNotNull(tableName, "table name is null");
+		this.uri = checkNotNull(uri, "uri is null");
+		this.proteumPredicatePushDown = proteumPredicatePushDown;
+		// if ("http".equalsIgnoreCase(uri.getScheme()) ||
+		// "https".equalsIgnoreCase(uri.getScheme())) {
+		remotelyAccessible = true;
+		addresses = ImmutableList.of(HostAddress.fromString(uri.getHost()));
+	}
 
-    @JsonProperty
-    public String getConnectorId()
-    {
-        return connectorId;
-    }
+	@JsonProperty
+	public String getConnectorId() {
+		return connectorId;
+	}
 
-    @JsonProperty
-    public String getSchemaName()
-    {
-        return schemaName;
-    }
+	@JsonProperty
+	public String getSchemaName() {
+		return schemaName;
+	}
 
-    @JsonProperty
-    public String getTableName()
-    {
-        return tableName;
-    }
+	@JsonProperty
+	public String getTableName() {
+		return tableName;
+	}
 
-    @JsonProperty
-    public URL getUri()
-    {
-        return uri;
-    }
-    
-    @JsonProperty
-    public List<ProteumColumnFilter> getColumnFilters(){
-        return this.columnFilters;
-    }
-    @Override
-    public boolean isRemotelyAccessible()
-    {
-        // only http or https is remotely accessible
-        return remotelyAccessible;
-    }
+	@JsonProperty
+	public URL getUri() {
+		return uri;
+	}
 
-    @Override
-    public List<HostAddress> getAddresses()
-    {
-        return addresses;
-    }
+	@JsonProperty
+	public ProteumPredicatePushDown getProteumPredicatePushDown() {
+		return proteumPredicatePushDown;
+	}
 
-    @Override
-    public Object getInfo()
-    {
-        return this;
-    }
+	@Override
+	public boolean isRemotelyAccessible() {
+		// only http or https is remotely accessible
+		return remotelyAccessible;
+	}
+
+	@Override
+	public List<HostAddress> getAddresses() {
+		return addresses;
+	}
+
+	@Override
+	public Object getInfo() {
+		return this;
+	}
 }

@@ -56,7 +56,7 @@ public class ProteumClient implements Watcher, Runnable, DataMonitor.DataMonitor
 	private static Queue<Integer> listenPort = new LinkedList<Integer>();
 	private static Map<Integer, ServerSocket> socketMap = new ConcurrentHashMap<Integer, ServerSocket>();
 	private static List<Integer> freePort = new ArrayList<Integer>();
-	private static final int PORT_START = 10001;
+	//private static final int PORT_START = 10001;
 	private static final int PORT_POOL_SIZE = 1000;
 	private static Boolean portMaintainanceRunning = false;
 
@@ -74,6 +74,8 @@ public class ProteumClient implements Watcher, Runnable, DataMonitor.DataMonitor
 		}else{
 			initializeClient();
 		}
+		int PORT_START = 10001;
+		PORT_START=config.getStartPort();
 		for(int i = PORT_START ; i < PORT_START + PORT_POOL_SIZE ; i++){
 		    try{
 		        ServerSocket serverSocket = new ServerSocket();

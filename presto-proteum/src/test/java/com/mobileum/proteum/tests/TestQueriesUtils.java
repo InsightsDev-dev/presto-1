@@ -56,14 +56,14 @@ public class TestQueriesUtils {
 				.row("seq", "bigint", true, false, "")
 				.row("num", "bigint", true, false, "")
 				.row("str", "varchar", true, false, "")
-				.row("timerange", "tsrange", true, false, "")
+				.row("timerange", "varchar", true, false, "")
 				.row("small", "bigint", true, false, "")
 				.row("float", "double", true, false, "").build();
 		assertEquals(testNoFilterProteumQueryRunner.execute("DESC CUSTOMER"),
 				default_proteum);
 		assertEqualsQueryQuery("DESC CUSTOMER");
 		final String orderByCustomer = " ORDER BY seq,num,str,timerange,small,float";
-		final String orderBySeqEqualsSeqVirtualNumMod3 = " ORDER BY small,num,str,timerange,float,num_mod_three";
+		final String orderBySeqEqualsSeqVirtualNumMod3 = " ORDER BY small,num,str,float,num_mod_three";
 		assertEqualsQueryQuery("SELECT * FROM CUSTOMER" + orderByCustomer);
 		assertEqualsQueryQuery("select * from customer where num in (10,100,150,200,250,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15"
 				+ ",16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44"
@@ -97,17 +97,17 @@ public class TestQueriesUtils {
 				+ orderByCustomer);
 		assertEqualsQueryQuery("select * from customer where num >= 1000 and num <=1200"
 				+ orderByCustomer);
-		assertDiffrentQueries(
-				"select customer.seq,customer.num,customer.str,customer.timerange,customer1.small,customer1.float "
-						+ "from customer join customer1 on customer.seq=customer1.seq order by customer.seq",
-				"select * from seq_equals_seq order by seq");
-		assertDiffrentQueries(
-				"select small,num from small_equals_small where small is not null order by small",
-				"select customer.small,sum(customer.num) as num from customer join customer1 on"
-						+ " customer.small=customer1.small group by customer.small order by customer.small");
-		assertEqualsQueryQuery("select count(*) from seq_equals_seq_all_dimensions where (num < 4992 OR num >= 17) "
-				+ "AND "
-				+ "(str is null OR timerange is null OR small is not null OR float is not null)");
+//		assertDiffrentQueries(
+//				"select customer.seq,customer.num,customer.str,customer1.small,customer1.float "
+//						+ "from customer join customer1 on customer.seq=customer1.seq order by customer.seq",
+//				"select * from seq_equals_seq order by seq");
+//		assertDiffrentQueries(
+//				"select small,num from small_equals_small where small is not null order by small",
+//				"select customer.small,sum(customer.num) as num from customer join customer1 on"
+//						+ " customer.small=customer1.small group by customer.small order by customer.small");
+//		assertEqualsQueryQuery("select count(*) from seq_equals_seq_all_dimensions where (num < 4992 OR num >= 17) "
+//				+ "AND "
+//				+ "(str is null OR timerange is null OR small is not null OR float is not null)");
 
 		System.out
 				.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");

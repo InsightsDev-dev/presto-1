@@ -27,12 +27,12 @@ implements ConnectorPartition
 {
     private final String schemaName;
     private final String tableName;
-    private final List<ProteumColumnFilter> columnFilters;
-    public ProteumPartition(String schemaName, String tableName, List<ProteumColumnFilter> columnFilters)
+    private final ProteumPredicatePushDown proteumPredicatePushDown;
+    public ProteumPartition(String schemaName, String tableName, ProteumPredicatePushDown proteumPredicatePushDown)
     {
         this.schemaName = checkNotNull(schemaName, "schema name is null");
         this.tableName = checkNotNull(tableName, "table name is null");
-        this.columnFilters = columnFilters;
+        this.proteumPredicatePushDown = proteumPredicatePushDown;
     }
 
     @Override
@@ -41,11 +41,12 @@ implements ConnectorPartition
         return schemaName + ":" + tableName;
     }
     
-    public List<ProteumColumnFilter> getColumnFilters(){
-        return this.columnFilters;
-    }
     
-    public String getSchemaName()
+    public ProteumPredicatePushDown getProteumPredicatePushDown() {
+		return proteumPredicatePushDown;
+	}
+
+	public String getSchemaName()
     {
         return schemaName;
     }

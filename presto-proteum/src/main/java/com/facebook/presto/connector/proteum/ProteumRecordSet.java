@@ -31,7 +31,7 @@ public class ProteumRecordSet implements RecordSet
     private final List<ProteumColumnHandle> columnHandles;
     private final List<Type> columnTypes;
     private final URL url;
-    private final List<ProteumColumnFilter> filters;
+    private final ProteumPredicatePushDown proteumPredicatePushDown;
 
     public ProteumRecordSet(ProteumSplit split, List<ProteumColumnHandle> columnHandles)
     {
@@ -42,7 +42,7 @@ public class ProteumRecordSet implements RecordSet
         }
         this.columnTypes = types.build();
         url = split.getUri();
-        this.filters = split.getColumnFilters();
+        this.proteumPredicatePushDown = split.getProteumPredicatePushDown();
     }
 
     @Override
@@ -54,6 +54,6 @@ public class ProteumRecordSet implements RecordSet
     @Override
     public RecordCursor cursor()
     {
-        return new ProteumRecordCursor(columnHandles, url, filters);
+        return new ProteumRecordCursor(columnHandles, url, proteumPredicatePushDown);
     }
 }
