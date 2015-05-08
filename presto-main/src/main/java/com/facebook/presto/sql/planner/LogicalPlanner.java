@@ -23,6 +23,8 @@ import com.facebook.presto.spi.ConnectorTableMetadata;
 import com.facebook.presto.sql.analyzer.Analysis;
 import com.facebook.presto.sql.analyzer.Field;
 import com.facebook.presto.sql.analyzer.TupleDescriptor;
+import com.facebook.presto.sql.planner.optimizations.CustomizedPredicatePushDown;
+import com.facebook.presto.sql.planner.optimizations.CustomizedPredicatePushDownContext;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.facebook.presto.sql.planner.plan.OutputNode;
 import com.facebook.presto.sql.planner.plan.PlanNode;
@@ -70,31 +72,42 @@ public class LogicalPlanner
     public Plan plan(Analysis analysis)
     {
         RelationPlan plan;
-        if (analysis.getCreateTableDestination().isPresent()) {
-            plan = createTableCreationPlan(analysis);
+	if (analysis.getCreateTableDestination().isPresent()) {
+		plan = createTableCreationPlan(analysis);
         }
         else if (analysis.getInsertTarget().isPresent()) {
-            plan = createInsertPlan(analysis);
+		plan = createInsertPlan(analysis);
         }
         else {
-            plan = createRelationPlan(analysis);
-        }
+		plan = createRelationPlan(analysis);
+	}
 
-        PlanNode root = createOutputPlan(plan, analysis);
+	PlanNode root = createOutputPlan(plan, analysis);
 
         // make sure we produce a valid plan. This is mainly to catch programming errors
-        PlanSanityChecker.validate(root);
-
-        for (PlanOptimizer optimizer : planOptimizers) {
-            root = optimizer.optimize(root, session, symbolAllocator.getTypes(), symbolAllocator, idAllocator);
-            checkNotNull(root, "%s returned a null plan", optimizer.getClass().getName());
-        }
+	PlanSanityChecker.validate(root);
+	CustomizedPredicatePushDownContext customizedPredicatePushDownContext = new CustomizedPredicatePushDownContext();
+	for (PlanOptimizer optimizer : planOptimizers) 
+	{
+		if (optimizer instanceof CustomizedPredicatePushDown) 
+		{
+			CustomizedPredicatePushDown customizedPredicatePushDownOptimizor = (CustomizedPredicatePushDown) optimizer;
+			root = customizedPredicatePushDownOptimizor.optimize(root,
+					session, symbolAllocator.getTypes(), symbolAllocator,
+					idAllocator, customizedPredicatePushDownContext);
+		} else 
+		{
+			root = optimizer.optimize(root, session,
+					symbolAllocator.getTypes(), symbolAllocator,
+					idAllocator);
+		}
+	}
 
         // make sure we produce a valid plan after optimizations run. This is mainly to catch programming errors
-        PlanSanityChecker.validate(root);
+	PlanSanityChecker.validate(root);
 
-        return new Plan(root, symbolAllocator);
-    }
+	return new Plan(root, symbolAllocator);
+}
 
     private RelationPlan createTableCreationPlan(Analysis analysis)
     {

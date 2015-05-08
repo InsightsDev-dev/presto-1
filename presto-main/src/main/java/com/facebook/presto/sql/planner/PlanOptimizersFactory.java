@@ -58,7 +58,6 @@ public class PlanOptimizersFactory
     public PlanOptimizersFactory(Metadata metadata, SqlParser sqlParser, IndexManager indexManager, FeaturesConfig featuresConfig, boolean forceSingleNode)
     {
         ImmutableList.Builder<PlanOptimizer> builder = ImmutableList.builder();
-
         builder.add(new ImplementSampleAsFilter(),
                 new CanonicalizeExpressions(),
                 new SimplifyExpressions(metadata, sqlParser),
@@ -66,7 +65,8 @@ public class PlanOptimizersFactory
                 new PruneRedundantProjections(),
                 new SetFlatteningOptimizer(),
                 new LimitPushDown(), // Run the LimitPushDown after flattening set operators to make it easier to do the set flattening
-                new PredicatePushDown(metadata, sqlParser),
+                new CustomizedPredicatePushDown(metadata, sqlParser, splitManager, featuresConfig.isExperimentalSyntaxEnabled()),
+                new CustomizedPredicatePushDown(metadata, sqlParser, splitManager, featuresConfig.isExperimentalSyntaxEnabled()), // Run predicate push down one more time in case we can leverage new information from generated partitions
                 new MergeProjections(),
                 new SimplifyExpressions(metadata, sqlParser), // Re-run the SimplifyExpressions to simplify any recomposed expressions from other optimizations
                 new ProjectionPushDown(),
