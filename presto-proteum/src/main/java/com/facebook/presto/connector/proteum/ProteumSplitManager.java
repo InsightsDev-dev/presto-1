@@ -36,6 +36,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.inject.Inject;
 import com.google.inject.name.Named;
+import com.mobileum.range.presto.AggregateVerifier;
 import com.mobileum.range.presto.ExpressionCheckerVisitor;
 import com.mobileum.range.presto.ExpressionFormatter;
 
@@ -97,6 +98,22 @@ public class ProteumSplitManager implements ConnectorSplitManager {
 						.setAggregatePushDownable(false);
 			}
 		}
+
+		if (tupleDomain instanceof ProteumTupleDomain
+				&& ((ProteumTupleDomain<ConnectorColumnHandle>) tupleDomain)
+						.isAggregatePushDownable()
+				&& ((ProteumTupleDomain<ConnectorColumnHandle>) tupleDomain)
+						.getPushDownAggregationList() != null
+				&& !((ProteumTupleDomain<ConnectorColumnHandle>) tupleDomain)
+						.getPushDownAggregationList().isEmpty()) {
+			if (!AggregateVerifier
+					.verify(ProteumRecordCursor
+							.buildAggregates(((ProteumTupleDomain<ConnectorColumnHandle>) tupleDomain)
+									.getPushDownAggregationList()))) {
+				((ProteumTupleDomain<ConnectorColumnHandle>) tupleDomain)
+						.setAggregatePushDownable(false);
+			}
+		}
 		String str = null;
 		if (tupleDomain instanceof ProteumTupleDomain) {
 			try {
@@ -129,8 +146,7 @@ public class ProteumSplitManager implements ConnectorSplitManager {
 						.isAggregatePushDownable()
 				&& ((((ProteumTupleDomain<ConnectorColumnHandle>) tupleDomain)
 						.getPushDownAggregationList() != null && !((ProteumTupleDomain<ConnectorColumnHandle>) tupleDomain)
-						.getPushDownAggregationList().isEmpty())
-				|| (((ProteumTupleDomain<ConnectorColumnHandle>) tupleDomain)
+						.getPushDownAggregationList().isEmpty()) || (((ProteumTupleDomain<ConnectorColumnHandle>) tupleDomain)
 						.getGroupBy() != null && !((ProteumTupleDomain<ConnectorColumnHandle>) tupleDomain)
 						.getGroupBy().isEmpty()))) {
 			proteumPredicatePushDown

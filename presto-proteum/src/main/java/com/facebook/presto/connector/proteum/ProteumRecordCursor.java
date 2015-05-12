@@ -132,7 +132,7 @@ public class ProteumRecordCursor implements RecordCursor {
 
 	}
 
-	private String buildAggregates(List<Expression> aggregates) {
+	public static String buildAggregates(List<Expression> aggregates) {
 		String defaultString = "aggregates=";
 		if (aggregates == null || aggregates.isEmpty()) {
 			return defaultString;
@@ -148,7 +148,7 @@ public class ProteumRecordCursor implements RecordCursor {
 		}
 	}
 
-	private String buildGroupBy(List<Symbol> groupBy) {
+	public static String buildGroupBy(List<Symbol> groupBy) {
 		String defaultString = "groupBy=";
 		if (groupBy == null || groupBy.isEmpty()) {
 			return defaultString;
@@ -162,7 +162,7 @@ public class ProteumRecordCursor implements RecordCursor {
 		}
 	}
 
-	private String buildColumnURL(List<ProteumColumnHandle> columns) {
+	public static String buildColumnURL(List<ProteumColumnHandle> columns) {
 		List<String> columnsName = new ArrayList<String>();
 		for (ProteumColumnHandle column : columns)
 			columnsName.add(column.getColumnName());
