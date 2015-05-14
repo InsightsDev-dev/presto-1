@@ -151,7 +151,7 @@ class AggregateFunctionVerfier {
 			if (function.getParameters() == null) {
 				return false;
 			} else if (function.getParameters().getExpressions() == null
-					|| function.getParameters().getExpressions().size() != 0) {
+					|| function.getParameters().getExpressions().size() == 0) {
 				return false;
 			} else {
 				Expression expression = function.getParameters()
