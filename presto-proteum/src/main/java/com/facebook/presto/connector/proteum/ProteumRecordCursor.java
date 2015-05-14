@@ -49,6 +49,9 @@ import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
 import com.google.common.io.CountingInputStream;
 import com.google.common.io.InputSupplier;
+import com.mobileum.presto.proteum.datatype.IDataType;
+import com.mobileum.presto.proteum.datatype.LongDataType;
+import com.mobileum.presto.proteum.datatype.Tuple;
 import com.mobileum.range.TimeStamp;
 import com.mobileum.range.TimeStampRange;
 import com.mobileum.range.presto.TSRange;
@@ -58,18 +61,21 @@ public class ProteumRecordCursor implements RecordCursor {
 	private static final Splitter LINE_SPLITTER = Splitter.on(";");
 
 	private final List<ProteumColumnHandle> columnHandles;
+	private IDataType[] proteumDataType;
 	private final int[] fieldToColumnIndex;
 
-	private final Iterator<String> lines;
+	private final Iterator<UnsafeMemory> data;
+	private UnsafeMemory current;
 	private final long totalBytes;
-
+	Object[] tempValues;
 	private List<String> fields;
 
 	public ProteumRecordCursor(List<ProteumColumnHandle> columnHandles,
 			URL url, ProteumPredicatePushDown proteumPredicatePushDown) {
 		final int listenPort = ProteumClient.getListenPort();
 		this.columnHandles = columnHandles;
-
+		proteumDataType = new IDataType[columnHandles.size()];
+		tempValues = new Object[columnHandles.size()];
 		fieldToColumnIndex = new int[columnHandles.size()];
 		for (int i = 0; i < columnHandles.size(); i++) {
 			fieldToColumnIndex[i] = i;
@@ -110,13 +116,18 @@ public class ProteumRecordCursor implements RecordCursor {
 			in = new BufferedReader(new InputStreamReader(
 					connection.getInputStream()));
 			String inputLine;
+			inputLine = in.readLine();
+			String[] types = inputLine.split(":");
+			for(int i = 0 ; i < proteumDataType.length ; i++){
+			    proteumDataType[i] = IDataType.getProteumTypeFromString(types[i]);
+			}
 			while ((inputLine = in.readLine()) != null) {
 			}
 			List<String> tempLines = new ArrayList<String>();
 			int length = 0;
 			scanThread.setFinished(true);
-
-			lines = scanThread.getData().iterator();
+			
+			data = scanThread.getData().iterator();
 			totalBytes = scanThread.getSize();
 		} catch (Exception e) {
 			throw new RuntimeException(e);
@@ -210,58 +221,68 @@ public class ProteumRecordCursor implements RecordCursor {
 
 	@Override
 	public boolean advanceNextPosition() {
-		if (!lines.hasNext()) {
-			return false;
+	    if(current == null){
+	        if(data.hasNext()) current = data.next();
+	        else return false;
+	    }
+		if(current.hasNext()){
+		    moveCursorToNext();
+		    return true;
 		}
-		String line = lines.next();
-		fields = LINE_SPLITTER.splitToList(line);
-
-		return true;
+		else{
+		    while(data.hasNext()){
+		        current = data.next();
+		        if(current.hasNext()) {
+		            moveCursorToNext();
+		            return true;
+		        }
+		    }
+		}
+		return false;
 	}
 
-	private String getFieldValue(int field) {
-		checkState(fields != null, "Cursor has not been advanced yes");
-
-		int columnIndex = fieldToColumnIndex[field];
-		return fields.get(columnIndex);
+	public void moveCursorToNext(){
+	    for(int i = 0 ; i < proteumDataType.length ; i++){
+	        if(current.getBoolean() == true){
+	        tempValues[i] = proteumDataType[i].readData(current);
+	        }
+	        else tempValues[i] = null;
+	    }
 	}
 
 	@Override
 	public boolean getBoolean(int field) {
-		checkFieldType(field, BOOLEAN);
-		return Boolean.parseBoolean(getFieldValue(field));
+	    return (boolean)tempValues[field];
 	}
 
 	@Override
 	public long getLong(int field) {
-		checkFieldType(field, BIGINT);
-		return Long.parseLong(getFieldValue(field));
+	    Number n = (Number)tempValues[field];
+	    return n.longValue();
 	}
 
 	@Override
 	public double getDouble(int field) {
-		checkFieldType(field, DOUBLE);
-		return Double.parseDouble(getFieldValue(field));
+	    Number n = (Number)tempValues[field];
+        return n.doubleValue();
 	}
 
 	@Override
 	public Slice getSlice(int field) {
-		if (getType(field).equals(TSRangeType.TS_RANGE_TYPE)) {
-			String arr[] = getFieldValue(field).split(":");
-			Long min = Long.parseLong(arr[0]);
-			Long max = Long.parseLong(arr[1]);
-			return TSRange.serialize(TSRange.createRange("["
-					+ (min == -1 ? "" : new TimeStamp(min * 1000)) + ","
-					+ (max == 0 ? "" : new TimeStamp(max * 1000)) + "]"));
-		}
-		checkFieldType(field, VARCHAR);
-		return Slices.utf8Slice(getFieldValue(field));
+	    if (getType(field).equals(TSRangeType.TS_RANGE_TYPE)) {
+            Tuple<Long, Long> r = (Tuple)tempValues[field];
+            Long min = r.getFirst();
+            Long max = r.getSecond();
+            return TSRange.serialize(TSRange.createRange("["
+                    + (min == -1 ? "" : new TimeStamp(min * 1000)) + ","
+                    + (max == 0 ? "" : new TimeStamp(max * 1000)) + "]"));
+        }
+	    return Slices.utf8Slice((String)tempValues[field]);
 	}
 
 	@Override
 	public boolean isNull(int field) {
-		checkArgument(field < columnHandles.size(), "Invalid field index");
-		return Strings.isNullOrEmpty(getFieldValue(field));
+		return tempValues[field] == null;
 	}
 
 	private void checkFieldType(int field, Type expected) {

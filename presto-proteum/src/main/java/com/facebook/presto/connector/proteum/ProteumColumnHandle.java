@@ -21,29 +21,33 @@ import com.facebook.presto.spi.type.Type;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Objects;
+import com.mobileum.presto.proteum.datatype.IDataType;
 
 public class ProteumColumnHandle implements ConnectorColumnHandle{
     private final String connectorId;
     private final String columnName;
     private final Type columnType;
+    private final IDataType proteumtype;
     private final int ordinalPosition;
 
     public ProteumColumnHandle(String connectorId, ColumnMetadata columnMetadata)
     {
-        this(connectorId, columnMetadata.getName(), columnMetadata.getType(), columnMetadata.getOrdinalPosition());
+        this(connectorId, columnMetadata.getName(), columnMetadata.getType(), columnMetadata.getOrdinalPosition(), ((ProteumColumnMetaData)columnMetadata).getProteumDataType());
     }
-
+    
     @JsonCreator
     public ProteumColumnHandle(
             @JsonProperty("connectorId") String connectorId,
             @JsonProperty("columnName") String columnName,
             @JsonProperty("columnType") Type columnType,
-            @JsonProperty("ordinalPosition") int ordinalPosition)
+            @JsonProperty("ordinalPosition") int ordinalPosition,
+            @JsonProperty("proteumtype") IDataType proteumType)
     {
         this.connectorId = checkNotNull(connectorId, "connectorId is null");
         this.columnName = checkNotNull(columnName, "columnName is null");
         this.columnType = checkNotNull(columnType, "columnType is null");
         this.ordinalPosition = ordinalPosition;
+        this.proteumtype = proteumType;
     }
 
     @JsonProperty
@@ -68,6 +72,11 @@ public class ProteumColumnHandle implements ConnectorColumnHandle{
     public int getOrdinalPosition()
     {
         return ordinalPosition;
+    }
+    
+    @JsonProperty
+    public IDataType getProteumtype(){
+        return this.proteumtype;
     }
 
     public ColumnMetadata getColumnMetadata()
@@ -104,6 +113,7 @@ public class ProteumColumnHandle implements ConnectorColumnHandle{
                 .add("columnName", columnName)
                 .add("columnType", columnType)
                 .add("ordinalPosition", ordinalPosition)
+                .add("proteumtype", proteumtype)
                 .toString();
     }
 }

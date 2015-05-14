@@ -44,6 +44,11 @@ import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.spi.type.VarcharType;
 import com.google.common.collect.Lists;
 import com.google.inject.Inject;
+import com.mobileum.presto.proteum.datatype.DoubleDataType;
+import com.mobileum.presto.proteum.datatype.IDataType;
+import com.mobileum.presto.proteum.datatype.IntDataType;
+import com.mobileum.presto.proteum.datatype.LongDataType;
+import com.mobileum.presto.proteum.datatype.StringDataType;
 import com.mobileum.range.presto.TSRangeType;
 
 public class ProteumClient implements Watcher, Runnable, DataMonitor.DataMonitorListener {
@@ -227,6 +232,7 @@ public class ProteumClient implements Watcher, Runnable, DataMonitor.DataMonitor
 		} else
 			return VarcharType.VARCHAR;
 	}
+	
 
 	public void addTable(String schema) throws MalformedURLException {
 		String[] toks = schema.split("\\$");
@@ -240,7 +246,8 @@ public class ProteumClient implements Watcher, Runnable, DataMonitor.DataMonitor
 		for (int i = 0; i < tableSchema.length; i++) {
 			String[] nameType = tableSchema[i].split(":");
 			Type type = getTypeFromString(nameType[1]);
-			columns.add(new ProteumColumn(nameType[0], type));
+			IDataType proteumType = new IDataType(nameType[1]);
+			columns.add(new ProteumColumn(nameType[0], type, proteumType));
 		}
 
 		List<URL> urls = new ArrayList<URL>();

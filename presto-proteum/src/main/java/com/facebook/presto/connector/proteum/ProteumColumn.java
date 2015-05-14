@@ -21,19 +21,23 @@ import com.facebook.presto.spi.type.Type;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Objects;
+import com.mobileum.presto.proteum.datatype.IDataType;
 
 public class ProteumColumn {
     private final String name;
     private final Type type;
+    private final IDataType proteumtype;
 
     @JsonCreator
     public ProteumColumn(
             @JsonProperty("name") String name,
-            @JsonProperty("type") Type type)
+            @JsonProperty("type") Type type,
+            @JsonProperty("proteumtype") IDataType proteumtype)
     {
         checkArgument(!isNullOrEmpty(name), "name is null or is empty");
         this.name = name;
         this.type = checkNotNull(type, "type is null");
+        this.proteumtype = proteumtype;
     }
 
     @JsonProperty
@@ -46,6 +50,11 @@ public class ProteumColumn {
     public Type getType()
     {
         return type;
+    }
+    
+    @JsonProperty
+    public IDataType getProteumType(){
+        return proteumtype;
     }
 
     @Override

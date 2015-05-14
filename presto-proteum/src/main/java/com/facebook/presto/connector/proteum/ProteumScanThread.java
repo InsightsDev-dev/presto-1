@@ -3,6 +3,7 @@ package com.facebook.presto.connector.proteum;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.InetSocketAddress;
@@ -16,7 +17,7 @@ import javax.management.RuntimeErrorException;
 
 public class ProteumScanThread extends Thread{
     private int listenPort;
-    private List<String> data = null;
+    private List<UnsafeMemory> data = null;
     private int size = -1;
     private boolean isFinished;
     private ServerSocket serverSocket;
@@ -55,15 +56,16 @@ public class ProteumScanThread extends Thread{
                 throw new RuntimeException(e);
             }
         }
-        data = new ArrayList<String>();
+        data = new ArrayList<UnsafeMemory>();
         size = 0;
         for(SocketScanThread thread : threads){
-            data.addAll(thread.getData());
+            UnsafeMemory memory = new UnsafeMemory(thread.getData());
+            data.add(memory);
             size+=thread.getCount();
         }
         closeServerSocket();
     }
-    public List<String> getData(){
+    public List<UnsafeMemory> getData(){
         if(data == null){
             waitForSocketThreadsToTerminate();
         }
@@ -109,12 +111,11 @@ public class ProteumScanThread extends Thread{
 }
 
 class SocketScanThread extends Thread{
-    private List<String> data;
+    private byte[] data;
     private int count;
     private Socket socket;
     public SocketScanThread(Socket socket){
         this.socket = socket;
-        data = new ArrayList<String>();
         count = 0;
     }
     
@@ -122,13 +123,18 @@ class SocketScanThread extends Thread{
     public void run() {
         try{
             
-            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            String line;
-            while((line = reader.readLine())!= null){
-                data.add(line);
-                count+=line.length();
+            InputStream in = socket.getInputStream();
+            int ch1 = in.read();
+            int ch2 = in.read();
+            int ch3 = in.read();
+            int ch4 = in.read();
+            
+            count =  ((ch1 << 24) + (ch2 << 16) + (ch3 << 8) + (ch4 << 0));
+            data = new byte[count];
+            int offset = 0;
+            while(offset < count){
+                offset+= in.read(data, offset, count-offset);
             }
-            reader.close();
             socket.close();
         }
         catch(Exception e){
@@ -136,7 +142,7 @@ class SocketScanThread extends Thread{
         }
     }
     
-    public List<String> getData(){
+    public byte[] getData(){
         return this.data;
     }
     

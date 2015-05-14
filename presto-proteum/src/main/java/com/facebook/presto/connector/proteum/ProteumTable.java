@@ -60,7 +60,7 @@ public class ProteumTable {
         int index = 0;
         ImmutableList.Builder<ColumnMetadata> columnsMetadata = ImmutableList.builder();
         for (ProteumColumn column : this.columns) {
-            columnsMetadata.add(new ColumnMetadata(column.getName(), column.getType(), index, false));
+            columnsMetadata.add(new ProteumColumnMetaData(column.getName(), column.getType(),column.getProteumType(), index, false));
             index++;
         }
         this.columnsMetadata = columnsMetadata.build();
