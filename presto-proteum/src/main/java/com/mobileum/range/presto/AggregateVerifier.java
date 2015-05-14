@@ -150,10 +150,10 @@ class AggregateFunctionVerfier {
 		} else if (function.getName().toLowerCase().equals("count")) {
 			if (function.getParameters() == null) {
 				return false;
-			} else if (function.getParameters().getExpressions() == null
-					|| function.getParameters().getExpressions().size() == 0) {
+			} else if (function.getParameters().getExpressions() == null) {
 				return false;
-			} else {
+			} else if (function.getParameters().getExpressions() != null
+					&& function.getParameters().getExpressions().size() == 1) {
 				Expression expression = function.getParameters()
 						.getExpressions().get(0);
 				if (!(expression instanceof Column)) {
