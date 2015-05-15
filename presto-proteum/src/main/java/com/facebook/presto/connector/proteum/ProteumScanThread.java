@@ -91,14 +91,14 @@ public class ProteumScanThread extends Thread{
                     Socket socket = serverSocket.accept();
                     SocketScanThread thread = new SocketScanThread(socket);
                     threads.add(thread);
+                    thread.setPriority(10);
+                    thread.start();
                     BufferedWriter out =
                             new BufferedWriter(new PrintWriter(socket.getOutputStream()));
                     out.write("start");
                     out.newLine();
                     out.flush();
                     socket.getOutputStream().flush();
-                    thread.setPriority(10);
-                    thread.start();
                 }
                 catch(Exception e){}
             }
