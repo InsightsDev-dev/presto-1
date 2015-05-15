@@ -74,8 +74,6 @@ public class ProteumRecordCursor implements RecordCursor {
 			URL url, ProteumPredicatePushDown proteumPredicatePushDown) {
 		final int listenPort = ProteumClient.getListenPort();
 		this.columnHandles = columnHandles;
-		proteumDataType = new IDataType[columnHandles.size()];
-		tempValues = new Object[columnHandles.size()];
 		fieldToColumnIndex = new int[columnHandles.size()];
 		for (int i = 0; i < columnHandles.size(); i++) {
 			fieldToColumnIndex[i] = i;
@@ -118,6 +116,8 @@ public class ProteumRecordCursor implements RecordCursor {
 			String inputLine;
 			inputLine = in.readLine();
 			String[] types = inputLine.split(":");
+			proteumDataType = new IDataType[types.length];
+			tempValues = new Object[types.length];
 			for(int i = 0 ; i < proteumDataType.length ; i++){
 			    proteumDataType[i] = IDataType.getProteumTypeFromString(types[i]);
 			}
