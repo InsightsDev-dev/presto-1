@@ -64,6 +64,8 @@ public class FunctionListBuilder
     private static final Set<Class<?>> NULLABLE_ARGUMENT_TYPES = ImmutableSet.<Class<?>>of(Boolean.class, Long.class, Double.class, Slice.class);
 
     private static final Set<Class<?>> SUPPORTED_TYPES = ImmutableSet.of(
+    		int.class,
+    		String.class,
             long.class,
             Long.class,
             double.class,
@@ -75,6 +77,7 @@ public class FunctionListBuilder
             JsonPath.class);
 
     private static final Set<Class<?>> SUPPORTED_RETURN_TYPES = ImmutableSet.of(
+    		String.class,
             long.class,
             double.class,
             Slice.class,
