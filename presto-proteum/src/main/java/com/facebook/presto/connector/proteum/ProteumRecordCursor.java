@@ -275,7 +275,7 @@ public class ProteumRecordCursor implements RecordCursor {
             Long max = r.getSecond();
             return TSRange.serialize(TSRange.createRange("["
                     + (min == -1 ? "" : new TimeStamp(min * 1000)) + ","
-                    + (max == 0 ? "" : new TimeStamp(max * 1000)) + "]"));
+                    + ((max == 0 || max==Long.MAX_VALUE) ? "" : new TimeStamp(max * 1000)) + "]"));
         }
 	    return Slices.utf8Slice((String)tempValues[field]);
 	}

@@ -511,6 +511,15 @@ public class FunctionRegistry
         if (actualType.equals(BIGINT) && expectedType.equals(DOUBLE)) {
             return true;
         }
+        if (actualType.getDisplayName().equals("integer") && expectedType.equals(DOUBLE)) {
+            return true;
+        }
+        if (actualType.getDisplayName().equals("integer") && expectedType.equals(BIGINT)) {
+            return true;
+        }
+        if (actualType.getDisplayName().equals("string") && expectedType.equals(VARCHAR)) {
+            return true;
+        }
         // widen date to timestamp
         if (actualType.equals(DATE) && expectedType.equals(TIMESTAMP)) {
             return true;
@@ -558,6 +567,17 @@ public class FunctionRegistry
         }
 
         if ((firstType.equals(BIGINT) || firstType.equals(DOUBLE)) && (secondType.equals(BIGINT) || secondType.equals(DOUBLE))) {
+            return Optional.<Type>of(DOUBLE);
+        }
+
+        if ((firstType.equals(VARCHAR) || firstType.getDisplayName().equals("string")) && (secondType.equals(VARCHAR) || secondType.getDisplayName().equals("string"))) {
+            return Optional.<Type>of(VARCHAR);
+        }
+
+        if ((firstType.equals(BIGINT) || firstType.getDisplayName().equals("integer")) && (secondType.equals(BIGINT) || secondType.getDisplayName().equals("integer"))) {
+            return Optional.<Type>of(BIGINT);
+        }
+        if ((firstType.getDisplayName().equals("integer") || firstType.equals(DOUBLE)) && (secondType.getDisplayName().equals("integer") || secondType.equals(DOUBLE))) {
             return Optional.<Type>of(DOUBLE);
         }
 

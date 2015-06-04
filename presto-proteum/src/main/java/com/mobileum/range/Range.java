@@ -8,16 +8,16 @@ import io.airlift.slice.Slices;
 /*
  A range's flagss byte contains these bits:
 #define RANGE_EMPTY         0x01     range is empty
-#define RANGE_LB_INC        0x02     lower bound is inclusive 
-#define RANGE_UB_INC        0x04     upper bound is inclusive 
-#define RANGE_LB_INF        0x08     lower bound is -infinity 
-#define RANGE_UB_INF        0x10     upper bound is +infinity 
-#define RANGE_LB_NULL       0x20     lower bound is null (NOT USED) 
-#define RANGE_UB_NULL       0x40     upper bound is null (NOT USED) 
+#define RANGE_LB_INC        0x02     lower bound is inclusive
+#define RANGE_UB_INC        0x04     upper bound is inclusive
+#define RANGE_LB_INF        0x08     lower bound is -infinity
+#define RANGE_UB_INF        0x10     upper bound is +infinity
+#define RANGE_LB_NULL       0x20     lower bound is null (NOT USED)
+#define RANGE_UB_NULL       0x40     upper bound is null (NOT USED)
 
 */
 /**
- * 
+ *
  * @author dilip kasana
  * @Date  13-Feb-2015
  */
@@ -486,7 +486,7 @@ public abstract class Range<T extends Comparable<T>>
             return false; /* bounds overlap */
     }
 
-    private boolean isEmpty(Range<T> range)
+    public boolean isEmpty(Range<T> range)
     {
         return RangeUtils.isEmpty(range.flags);
     }
@@ -722,7 +722,7 @@ public abstract class Range<T extends Comparable<T>>
             }
         }
     }
-    
+
     public Range<T> parse(String range,ConnectorSession session){
         if (range == null) {
             throw new RuntimeException();
@@ -914,7 +914,7 @@ public abstract class Range<T extends Comparable<T>>
 
     @Override
     public abstract T parseValue(String value);
-    
+
     @Override
     public abstract T parseValue(String value,ConnectorSession session);
 

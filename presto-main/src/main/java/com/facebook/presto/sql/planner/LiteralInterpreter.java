@@ -129,6 +129,9 @@ public final class LiteralInterpreter
         if (type.equals(BOOLEAN)) {
             return new BooleanLiteral(object.toString());
         }
+        if(type.getDisplayName().equals("string")){
+        	return new GenericLiteral("string", object.toString());
+        }
 
         Signature signature = FunctionRegistry.getMagicLiteralFunctionSignature(type);
         Expression rawLiteral = toExpression(object, FunctionRegistry.type(type.getJavaType()));
