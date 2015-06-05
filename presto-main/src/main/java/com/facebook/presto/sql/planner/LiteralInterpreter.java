@@ -132,6 +132,10 @@ public final class LiteralInterpreter
         if(type.getDisplayName().equals("string")){
         	return new GenericLiteral("string", object.toString());
         }
+        
+        if(type.getDisplayName().equals("integer")){
+        	return new GenericLiteral("integer", object.toString());
+        }
 
         Signature signature = FunctionRegistry.getMagicLiteralFunctionSignature(type);
         Expression rawLiteral = toExpression(object, FunctionRegistry.type(type.getJavaType()));
