@@ -137,6 +137,10 @@ public final class LiteralInterpreter
         if(type.getDisplayName().equals("string")){
         	return new GenericLiteral("string", object.toString());
         }
+        
+        if(type.getDisplayName().equals("integer")){
+        	return new GenericLiteral("integer", object.toString());
+        }
 
         if (object instanceof Slice && !type.equals(VARCHAR)) {
             // HACK: we need to serialize VARBINARY in a format that can be embedded in an expression to be
