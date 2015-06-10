@@ -34,11 +34,7 @@ import com.facebook.presto.execution.TaskId;
 import com.facebook.presto.execution.TaskInfo;
 import com.facebook.presto.metadata.MetadataManager;
 import com.facebook.presto.operator.ExchangeClient;
-<<<<<<< HEAD:presto-main/src/main/java/com/facebook/presto/server/StatementResource.java
-=======
-import com.facebook.presto.operator.Page;
 import com.facebook.presto.spi.ConnectorMetadata;
->>>>>>> support for query rewritting in presto:presto-server/src/main/java/com/facebook/presto/server/StatementResource.java
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.ErrorCode;
 import com.facebook.presto.spi.Page;
@@ -160,25 +156,10 @@ public class StatementResource
             throws InterruptedException
     {
         assertRequest(!isNullOrEmpty(statement), "SQL statement is empty");
-
-        assertRequest(!isNullOrEmpty(user), "User (%s) is empty", PRESTO_USER);
-        assertRequest(!isNullOrEmpty(catalog), "Catalog (%s) is empty", PRESTO_CATALOG);
-        assertRequest(!isNullOrEmpty(schema), "Schema (%s) is empty", PRESTO_SCHEMA);
-        if(catalog.equalsIgnoreCase("proteum")){
-            statement = rewriteQuery(statement);
-        }
-        if (timeZoneId == null) {
-            timeZoneId = TimeZone.getDefault().getID();
-        }
-
-        Locale locale = Locale.getDefault();
-        if (language != null) {
-            locale = Locale.forLanguageTag(language);
-        }
-
-        String remoteUserAddress = requestContext.getRemoteAddr();
-
-        ConnectorSession session = new ConnectorSession(user, source, catalog, schema, getTimeZoneKey(timeZoneId), locale, remoteUserAddress, userAgent);
+//		 if(catalog.equalsIgnoreCase("proteum")){
+//            statement = rewriteQuery(statement);
+//        }
+        Session session = createSessionForRequest(servletRequest);
 
         ExchangeClient exchangeClient = exchangeClientSupplier.get();
         Query query = new Query(session, statement, queryManager, exchangeClient);
@@ -186,7 +167,6 @@ public class StatementResource
 
         return Response.ok(query.getNextResults(uriInfo, new Duration(1, TimeUnit.MILLISECONDS))).build();
     }
-
     private String rewriteQuery(String query){
         ConnectorMetadata proteumMetadata = metaManager.getConnectorMetadataById("proteum");
         
@@ -229,16 +209,6 @@ public class StatementResource
     {
         if (!expression) {
             throw badRequest(format(format, args));
-        }
-    }
-
-    static TimeZoneKey getTimeZoneKey(String timeZoneId)
-    {
-        try {
-            return TimeZoneKey.getTimeZoneKey(timeZoneId);
-        }
-        catch (TimeZoneNotSupportedException e) {
-            throw badRequest(e.getMessage());
         }
     }
 

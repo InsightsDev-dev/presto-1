@@ -97,4 +97,14 @@
             <unpack />
         </artifact>
     </artifactSet>
+    <artifactSet to="plugin/text">
+        <artifact id="${project.groupId}:presto-text:zip:${project.version}">
+            <unpack />
+        </artifact>
+    </artifactSet>
+    <artifactSet to="plugin/proteum">
+        <artifact id="${project.groupId}:presto-proteum:zip:${project.version}">
+            <unpack />
+        </artifact>
+     </artifactSet>
 </runtime>

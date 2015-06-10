@@ -37,7 +37,7 @@
         <air.main.basedir>${project.basedir}</air.main.basedir>
 
         <air.check.skip-extended>true</air.check.skip-extended>
-        <air.check.skip-license>false</air.check.skip-license>
+        <air.check.skip-license>true</air.check.skip-license>
 
         <air.check.fail-checkstyle>true</air.check.fail-checkstyle>
         <air.check.skip-checkstyle>false</air.check.skip-checkstyle>
@@ -69,7 +69,7 @@
         <module>presto-hive-hadoop2</module>
         <module>presto-hive-cdh4</module>
         <module>presto-hive-cdh5</module>
-	<module>presto-text</module>
+		<module>presto-text</module>
         <module>presto-proteum</module>
         <module>presto-example-http</module>
         <module>presto-tpch</module>
@@ -87,11 +87,8 @@
         <module>presto-cli</module>
         <module>presto-benchmark-driver</module>
         <module>presto-server</module>
-<<<<<<< HEAD
-        <module>presto-docs</module>
+ 		<module>presto-docs</module>
         <module>presto-verifier</module>
-=======
->>>>>>> Changes to Presto Proteum Service.
     </modules>
 
     <dependencyManagement>
@@ -739,19 +736,6 @@
                                 </pluginExecution>
                                 <pluginExecution>
                                     <pluginExecutionFilter>
-                                        <groupId>com.mycila</groupId>
-                                        <artifactId>license-maven-plugin</artifactId>
-                                        <versionRange>[2.3,)</versionRange>
-                                        <goals>
-                                            <goal>check</goal>
-                                        </goals>
-                                    </pluginExecutionFilter>
-                                    <action>
-                                        <ignore />
-                                    </action>
-                                </pluginExecution>
-                                <pluginExecution>
-                                    <pluginExecutionFilter>
                                         <groupId>com.ning.maven.plugins</groupId>
                                         <artifactId>maven-duplicate-finder-plugin</artifactId>
                                         <versionRange>[1.0.4,)</versionRange>
@@ -814,6 +798,7 @@
 
         <plugins>
 <<<<<<< HEAD
+<<<<<<< HEAD
             <plugin>
                 <groupId>org.gaul</groupId>
                 <artifactId>modernizer-maven-plugin</artifactId>
@@ -872,6 +857,8 @@
                 </dependencies>
             </plugin>
 
+=======
+>>>>>>> upgrading 0.69 to 0.82
             <plugin>
                 <groupId>io.takari.maven.plugins</groupId>
                 <artifactId>presto-maven-plugin</artifactId>
@@ -886,6 +873,7 @@
                 <extensions>true</extensions>
             </plugin>
 <<<<<<< HEAD
+<<<<<<< HEAD
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -898,6 +886,8 @@
 =======
 >>>>>>> Changes to Presto Proteum Service.
 >>>>>>> Changes to Presto Proteum Service.
+=======
+>>>>>>> upgrading 0.69 to 0.82
         </plugins>
     </build>
 
