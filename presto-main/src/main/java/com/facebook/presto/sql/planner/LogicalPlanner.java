@@ -23,7 +23,6 @@ import com.facebook.presto.spi.ConnectorTableMetadata;
 import com.facebook.presto.sql.analyzer.Analysis;
 import com.facebook.presto.sql.analyzer.Field;
 import com.facebook.presto.sql.analyzer.TupleDescriptor;
-import com.facebook.presto.sql.planner.optimizations.CustomizedPredicatePushDown;
 import com.facebook.presto.sql.planner.optimizations.CustomizedPredicatePushDownContext;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.facebook.presto.sql.planner.plan.OutputNode;
@@ -86,23 +85,11 @@ public class LogicalPlanner
 
         // make sure we produce a valid plan. This is mainly to catch programming errors
 	PlanSanityChecker.validate(root);
-	CustomizedPredicatePushDownContext customizedPredicatePushDownContext = new CustomizedPredicatePushDownContext();
 	for (PlanOptimizer optimizer : planOptimizers) 
 	{
-		if (optimizer instanceof CustomizedPredicatePushDown) 
-		{
-			CustomizedPredicatePushDown customizedPredicatePushDownOptimizor = (CustomizedPredicatePushDown) optimizer;
-//			root = customizedPredicatePushDownOptimizor.optimize(root,
-//					session, symbolAllocator.getTypes(), symbolAllocator,
-//					idAllocator, customizedPredicatePushDownContext);
-			//@Todo dilip : fix this
-			throw new RuntimeException("Fix this");
-		} else 
-		{
 			root = optimizer.optimize(root, session,
 					symbolAllocator.getTypes(), symbolAllocator,
 					idAllocator);
-		}
 	}
 
         // make sure we produce a valid plan after optimizations run. This is mainly to catch programming errors
