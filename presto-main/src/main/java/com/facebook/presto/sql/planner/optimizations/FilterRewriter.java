@@ -1,6 +1,5 @@
 package com.facebook.presto.sql.planner.optimizations;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.collect.Iterables.transform;
 
 import java.util.HashSet;
@@ -15,21 +14,18 @@ import com.facebook.presto.sql.tree.DefaultExpressionTraversalVisitor;
 import com.facebook.presto.sql.tree.Expression;
 import com.facebook.presto.sql.tree.ExpressionRewriter;
 import com.facebook.presto.sql.tree.ExpressionTreeRewriter;
-import com.facebook.presto.sql.tree.FunctionCall;
-import com.facebook.presto.sql.tree.InputReference;
 import com.facebook.presto.sql.tree.LogicalBinaryExpression;
 import com.facebook.presto.sql.tree.QualifiedNameReference;
 import com.google.common.base.Function;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
-import com.google.common.collect.ImmutableMap;
 
 /**
  * 
- * @author dilipsingh
+ * @author Dilip Kasana
  * @Date 01-May-2015
  */
+//wrong naming used here.instead use dimension
 public class FilterRewriter {
 
 	public static Expression remainingAfterRemovingAggregateFilterExpression(
@@ -51,7 +47,11 @@ public class FilterRewriter {
 	}
 
 }
-
+/**
+ * 
+ * @author Dilip Kasana
+ *
+ */
 class RemainingAfterRemovingAggregateFilterExpressionRewriter extends
 		ExpressionRewriter<Void> {
 	Map<Symbol, Type> symbolTypes;
@@ -73,9 +73,10 @@ class RemainingAfterRemovingAggregateFilterExpressionRewriter extends
 	public Expression rewriteExpression(Expression node, Void context,
 			ExpressionTreeRewriter<Void> treeRewriter) {
 		boolean isOnlyAggregates = isOnlyAggregates(node);
-		if (isOnlyAggregates) {
+		if(isOnlyAggregates){
 			return BooleanLiteral.TRUE_LITERAL;
-		} else {
+		}
+		else {
 			return node;
 		}
 	}
@@ -85,16 +86,27 @@ class RemainingAfterRemovingAggregateFilterExpressionRewriter extends
 			LogicalBinaryExpression node, Void context,
 			ExpressionTreeRewriter<Void> treeRewriter) {
 		if (LogicalBinaryExpression.Type.AND.equals(node.getType())) {
-			boolean onlyAggregatesAtLeft = isOnlyAggregates(node.getLeft());
-			boolean onlyAggregatesAtRight = isOnlyAggregates(node.getRight());
-			if (onlyAggregatesAtLeft && onlyAggregatesAtRight) {
+			boolean isOnlyAggregatesAtLeft = isOnlyAggregates(node.getLeft());
+			boolean isOnlyAggregatesAtRight = isOnlyAggregates(node.getRight());
+			if (isOnlyAggregatesAtLeft && isOnlyAggregatesAtRight) {
 				return BooleanLiteral.TRUE_LITERAL;
-			} else if (onlyAggregatesAtLeft) {
-				return node.getRight();
-			} else if (onlyAggregatesAtRight) {
-				return node.getLeft();
+			} 
+			if (isOnlyAggregatesAtLeft) {
+				return ExpressionTreeRewriter.rewriteWith(this, node.getRight());
+			} else if (isOnlyAggregatesAtRight) {
+				return ExpressionTreeRewriter.rewriteWith(this, node.getLeft());
 			} else {
-				return node;
+				Expression left=ExpressionTreeRewriter.rewriteWith(this, node.getLeft());
+				Expression right =ExpressionTreeRewriter.rewriteWith(this, node.getRight());
+				 if (BooleanLiteral.FALSE_LITERAL.equals(left) || BooleanLiteral.TRUE_LITERAL.equals(right)) {
+                     return left;
+                 }
+                 if (BooleanLiteral.FALSE_LITERAL.equals(right) || BooleanLiteral.TRUE_LITERAL.equals(left)) {
+                     return right;
+                 }
+				return new LogicalBinaryExpression(LogicalBinaryExpression.Type.AND,  
+						left, 
+						right);
 			}
 		} else {
 			boolean onlyAggregatesAtLeft = isOnlyAggregates(node.getLeft());
@@ -156,6 +168,25 @@ class RemainingAfterRemovingAggregateFilterExpressionRewriter extends
 		}
 		return true;
 	}
+	
+	private boolean isAnyAggregates(Expression expression) {
+		Builder<Symbol> symbols = ExpressionSymbolExtractor.getSymbols(
+				symbolTypes, groupBy, symbolToColumnName, expression);
+		Function<Symbol, Symbol> syFunction = new Function<Symbol, Symbol>() {
+			@Override
+			public Symbol apply(Symbol symbol) {
+				return new Symbol(symbolToColumnName.get(symbol).getName()
+						.toString());
+			}
+		};
+
+		for (Symbol symbol : transform(symbols.build(), syFunction)) {
+			if (groupBy.contains(symbol)) {
+				return true;
+			}
+		}
+		return false;
+	}
 }
 
 class AggregateFilterRewriter extends ExpressionRewriter<Void> {
@@ -194,13 +225,26 @@ class AggregateFilterRewriter extends ExpressionRewriter<Void> {
 			boolean onlyAggregatesAtRight = isOnlyAggregates(node.getRight());
 			if (onlyAggregatesAtLeft && onlyAggregatesAtRight) {
 				return node;
-			} else if (onlyAggregatesAtLeft) {
-				return node.getLeft();
+			} 
+			Expression left=node.getLeft();
+			Expression right=node.getRight();
+			if (onlyAggregatesAtLeft) {
+				right=ExpressionTreeRewriter.rewriteWith(this, node.getRight());
 			} else if (onlyAggregatesAtRight) {
-				return node.getRight();
+				left=ExpressionTreeRewriter.rewriteWith(this, node.getLeft());
 			} else {
-				return BooleanLiteral.TRUE_LITERAL;
+				left=  ExpressionTreeRewriter.rewriteWith(this, node.getLeft());
+				right=ExpressionTreeRewriter.rewriteWith(this, node.getRight());
 			}
+			 if (BooleanLiteral.FALSE_LITERAL.equals(left) || BooleanLiteral.TRUE_LITERAL.equals(right)) {
+                 return left;
+             }
+             if (BooleanLiteral.FALSE_LITERAL.equals(right) || BooleanLiteral.TRUE_LITERAL.equals(left)) {
+                 return right;
+             }
+			return new LogicalBinaryExpression(LogicalBinaryExpression.Type.AND,  
+					left, 
+					right);
 		} else {
 			boolean onlyAggregatesAtLeft = isOnlyAggregates(node.getLeft());
 			boolean onlyAggregatesAtRight = isOnlyAggregates(node.getRight());

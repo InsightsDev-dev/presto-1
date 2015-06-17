@@ -39,7 +39,7 @@
         <air.check.skip-extended>true</air.check.skip-extended>
         <air.check.skip-license>true</air.check.skip-license>
 
-        <air.check.fail-checkstyle>true</air.check.fail-checkstyle>
+        <air.check.fail-checkstyle>false</air.check.fail-checkstyle>
         <air.check.skip-checkstyle>false</air.check.skip-checkstyle>
 
         <dep.antlr.version>4.3</dep.antlr.version>
@@ -88,7 +88,7 @@
         <module>presto-cli</module>
         <module>presto-benchmark-driver</module>
         <module>presto-server</module>
- 		<module>presto-docs</module>
+        <module>presto-docs</module>
         <module>presto-verifier</module>
     </modules>
 
@@ -139,7 +139,7 @@
 				<version>${project.version}</version>
 				<type>zip</type>
 			</dependency>
-			
+
             <dependency>
                 <groupId>com.facebook.presto</groupId>
                 <artifactId>presto-proteum</artifactId>
@@ -159,6 +159,7 @@
                 <artifactId>presto-tpch</artifactId>
                 <version>${project.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>com.facebook.presto</groupId>
                 <artifactId>presto-base-jdbc</artifactId>
@@ -742,6 +743,21 @@
                                         <ignore />
                                     </action>
                                 </pluginExecution>
+                                <!--
+                                <pluginExecution>
+                                    <pluginExecutionFilter>
+                                        <groupId>com.mycila</groupId>
+                                        <artifactId>license-maven-plugin</artifactId>
+                                        <versionRange>[2.3,)</versionRange>
+                                        <goals>
+                                            <goal>check</goal>
+                                        </goals>
+                                    </pluginExecutionFilter>
+                                    <action>
+                                        <ignore />
+                                    </action>
+                                </pluginExecution>
+                                -->
                                 <pluginExecution>
                                     <pluginExecutionFilter>
                                         <groupId>com.ning.maven.plugins</groupId>
@@ -805,8 +821,6 @@
         </pluginManagement>
 
         <plugins>
-<<<<<<< HEAD
-<<<<<<< HEAD
             <plugin>
                 <groupId>org.gaul</groupId>
                 <artifactId>modernizer-maven-plugin</artifactId>
@@ -829,6 +843,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
                 <version>2.11</version>
+                <!--
                 <executions>
                     <execution>
                         <phase>validate</phase>
@@ -845,6 +860,7 @@
                         </configuration>
                     </execution>
                 </executions>
+                -->
                 <dependencies>
                     <!-- The version of checkstyle the plugin depends on doesn't support Java 8,
                          so override it manually until a new version of the plugin is released.
@@ -865,8 +881,6 @@
                 </dependencies>
             </plugin>
 
-=======
->>>>>>> upgrading 0.69 to 0.82
             <plugin>
                 <groupId>io.takari.maven.plugins</groupId>
                 <artifactId>presto-maven-plugin</artifactId>
@@ -880,8 +894,6 @@
                 <version>0.1.11</version>
                 <extensions>true</extensions>
             </plugin>
-<<<<<<< HEAD
-<<<<<<< HEAD
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -890,12 +902,6 @@
                     <fork>false</fork>
                 </configuration>
             </plugin>
-=======
-=======
->>>>>>> Changes to Presto Proteum Service.
->>>>>>> Changes to Presto Proteum Service.
-=======
->>>>>>> upgrading 0.69 to 0.82
         </plugins>
     </build>
 

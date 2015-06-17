@@ -206,7 +206,7 @@ public class HashGenerationOptimizer
             PlanNode leftHashProjectNode = getHashProjectNode(idAllocator, rewrittenLeft, leftHashSymbol, leftSymbols);
             PlanNode rightHashProjectNode = getHashProjectNode(idAllocator, rewrittenRight, rightHashSymbol, rightSymbols);
 
-            return new JoinNode(idAllocator.getNextId(), node.getType(), leftHashProjectNode, rightHashProjectNode, node.getCriteria(), Optional.of(leftHashSymbol), Optional.of(rightHashSymbol));
+            return new JoinNode(idAllocator.getNextId(), node.getType(), leftHashProjectNode, rightHashProjectNode, node.getCriteria(), Optional.of(leftHashSymbol), Optional.of(rightHashSymbol),node.getComparisons());
         }
 
         @Override

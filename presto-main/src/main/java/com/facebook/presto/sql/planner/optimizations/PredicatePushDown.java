@@ -15,10 +15,17 @@ package com.facebook.presto.sql.planner.optimizations;
 
 import com.facebook.presto.Session;
 import com.facebook.presto.metadata.Metadata;
+import com.facebook.presto.metadata.MetadataManager;
+import com.facebook.presto.metadata.Signature;
+import com.facebook.presto.spi.ColumnHandle;
+import com.facebook.presto.spi.TupleDomain;
+import com.facebook.presto.spi.type.BigintType;
+import com.facebook.presto.spi.type.DoubleType;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.DependencyExtractor;
 import com.facebook.presto.sql.planner.DeterminismEvaluator;
+import com.facebook.presto.sql.planner.DomainTranslator;
 import com.facebook.presto.sql.planner.EffectivePredicateExtractor;
 import com.facebook.presto.sql.planner.EqualityInference;
 import com.facebook.presto.sql.planner.ExpressionInterpreter;
@@ -44,19 +51,27 @@ import com.facebook.presto.sql.planner.plan.UnionNode;
 import com.facebook.presto.sql.planner.plan.UnnestNode;
 import com.facebook.presto.sql.planner.plan.ValuesNode;
 import com.facebook.presto.sql.tree.BooleanLiteral;
+import com.facebook.presto.sql.tree.Cast;
 import com.facebook.presto.sql.tree.ComparisonExpression;
+import com.facebook.presto.sql.tree.DefaultExpressionTraversalVisitor;
 import com.facebook.presto.sql.tree.Expression;
 import com.facebook.presto.sql.tree.ExpressionTreeRewriter;
+import com.facebook.presto.sql.tree.FunctionCall;
 import com.facebook.presto.sql.tree.LongLiteral;
 import com.facebook.presto.sql.tree.NullLiteral;
+import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.sql.tree.QualifiedNameReference;
+import com.google.common.base.Function;
+import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
+import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 
 import io.airlift.log.Logger;
 
@@ -64,10 +79,12 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
 import static com.facebook.presto.sql.ExpressionUtils.and;
@@ -114,17 +131,19 @@ public class PredicatePushDown
         checkNotNull(types, "types is null");
         checkNotNull(idAllocator, "idAllocator is null");
 
-        return PlanRewriter.rewriteWith(new Rewriter(symbolAllocator, idAllocator, metadata, sqlParser, session), plan, BooleanLiteral.TRUE_LITERAL);
+        return PlanRewriter.rewriteWith(new Rewriter(symbolAllocator, idAllocator, metadata, sqlParser, session), plan, PredicatePushDownContext.TRUE_LITERAL());
     }
 
     private static class Rewriter
-            extends PlanRewriter<Expression>
+            extends PlanRewriter<PredicatePushDownContext>
     {
         private final SymbolAllocator symbolAllocator;
         private final PlanNodeIdAllocator idAllocator;
         private final Metadata metadata;
         private final SqlParser sqlParser;
         private final Session session;
+		private final CustomizedPredicatePushDownContext customizedPredicatePushDownContext;
+		private Map<Symbol, Expression> modifiMap = new HashMap<Symbol, Expression>();
 
         private Rewriter(
                 SymbolAllocator symbolAllocator,
@@ -138,21 +157,23 @@ public class PredicatePushDown
             this.metadata = checkNotNull(metadata, "metadata is null");
             this.sqlParser = checkNotNull(sqlParser, "sqlParser is null");
             this.session = checkNotNull(session, "session is null");
+			this.customizedPredicatePushDownContext = new CustomizedPredicatePushDownContext();
         }
 
         @Override
-        public PlanNode visitPlan(PlanNode node, RewriteContext<Expression> context)
+        public PlanNode visitPlan(PlanNode node, RewriteContext<PredicatePushDownContext> context)
         {
-            PlanNode rewrittenNode = context.defaultRewrite(node, BooleanLiteral.TRUE_LITERAL);
-            if (!context.get().equals(BooleanLiteral.TRUE_LITERAL)) {
+            PlanNode rewrittenNode = context.defaultRewrite(node, PredicatePushDownContext.TRUE_LITERAL());
+            if (!context.get().getExpression().equals(BooleanLiteral.TRUE_LITERAL)) {
                 // Drop in a FilterNode b/c we cannot push our predicate down any further
-                rewrittenNode = new FilterNode(idAllocator.getNextId(), rewrittenNode, context.get());
+                rewrittenNode = new FilterNode(idAllocator.getNextId(), rewrittenNode, context.get().getExpression());
             }
             return rewrittenNode;
         }
-
+//we don't know about aggregate push down here.
+        
         @Override
-        public PlanNode visitExchange(ExchangeNode node, RewriteContext<Expression> context)
+        public PlanNode visitExchange(ExchangeNode node, RewriteContext<PredicatePushDownContext> context)
         {
             boolean modified = false;
             ImmutableList.Builder<PlanNode> builder = ImmutableList.builder();
@@ -164,9 +185,9 @@ public class PredicatePushDown
                             node.getInputs().get(i).get(index).toQualifiedNameReference());
                 }
 
-                Expression sourcePredicate = ExpressionTreeRewriter.rewriteWith(new ExpressionSymbolInliner(outputsToInputs), context.get());
+                Expression sourcePredicate = ExpressionTreeRewriter.rewriteWith(new ExpressionSymbolInliner(outputsToInputs), context.get().getExpression());
                 PlanNode source = node.getSources().get(i);
-                PlanNode rewrittenSource = context.rewrite(source, sourcePredicate);
+                PlanNode rewrittenSource = context.rewrite(source,new PredicatePushDownContext(sourcePredicate));
                 if (rewrittenSource != source) {
                     modified = true;
                 }
@@ -188,8 +209,10 @@ public class PredicatePushDown
         }
 
         @Override
-        public PlanNode visitProject(ProjectNode node, RewriteContext<Expression> context)
+        public PlanNode visitProject(ProjectNode node, RewriteContext<PredicatePushDownContext> context)
         {
+        	customizedPredicatePushDownContext.getSymbolToExpressionMap().put(
+					node.getId(), node.getAssignments());
             Set<Symbol> deterministicSymbols = node.getAssignments().entrySet().stream()
                     .filter(entry -> DeterminismEvaluator.isDeterministic(entry.getValue()))
                     .map(Map.Entry::getKey)
@@ -198,11 +221,22 @@ public class PredicatePushDown
             java.util.function.Predicate<Expression> deterministic = conjunct -> DependencyExtractor.extractAll(conjunct).stream()
                     .allMatch(deterministicSymbols::contains);
 
-            Map<Boolean, List<Expression>> conjuncts = extractConjuncts(context.get()).stream().collect(Collectors.partitioningBy(deterministic));
+            Map<Boolean, List<Expression>> conjuncts = extractConjuncts(context.get().getExpression()).stream().collect(Collectors.partitioningBy(deterministic));
 
             // Push down conjuncts from the inherited predicate that don't depend on non-deterministic assignments
-            PlanNode rewrittenNode = context.defaultRewrite(node,
-                    ExpressionTreeRewriter.rewriteWith(new ExpressionSymbolInliner(node.getAssignments()), combineConjuncts(conjuncts.get(true))));
+            Expression expression=ExpressionTreeRewriter.rewriteWith(new ExpressionSymbolInliner(node.getAssignments()), combineConjuncts(conjuncts.get(true)));
+            PlanNode rewrittenNode =  context.defaultRewrite(node,
+                    context.get().setExpression(expression));
+			HashMap<Symbol, Expression> hashMap2 = new HashMap<Symbol, Expression>();
+			for (Entry<Symbol, Expression> entry : ((ProjectNode)rewrittenNode)
+					.getAssignments().entrySet()) {
+				if (modifiMap.containsKey(entry.getKey())) {
+					hashMap2.put(entry.getKey(), modifiMap.get(entry.getKey()));
+				} else {
+					hashMap2.put(entry.getKey(), entry.getValue());
+				}
+			}
+				rewrittenNode=new ProjectNode(rewrittenNode.getId(), ((ProjectNode) rewrittenNode).getSource(), hashMap2);
 
             // All non-deterministic conjuncts, if any, will be in the filter node.
             if (!conjuncts.get(false).isEmpty()) {
@@ -213,27 +247,27 @@ public class PredicatePushDown
         }
 
         @Override
-        public PlanNode visitMarkDistinct(MarkDistinctNode node, RewriteContext<Expression> context)
+        public PlanNode visitMarkDistinct(MarkDistinctNode node, RewriteContext<PredicatePushDownContext> context)
         {
-            checkState(!DependencyExtractor.extractUnique(context.get()).contains(node.getMarkerSymbol()), "predicate depends on marker symbol");
+            checkState(!DependencyExtractor.extractUnique(context.get().getExpression()).contains(node.getMarkerSymbol()), "predicate depends on marker symbol");
             return context.defaultRewrite(node, context.get());
         }
 
         @Override
-        public PlanNode visitSort(SortNode node, RewriteContext<Expression> context)
+        public PlanNode visitSort(SortNode node, RewriteContext<PredicatePushDownContext> context)
         {
             return context.defaultRewrite(node, context.get());
         }
 
         @Override
-        public PlanNode visitUnion(UnionNode node, RewriteContext<Expression> context)
+        public PlanNode visitUnion(UnionNode node, RewriteContext<PredicatePushDownContext> context)
         {
             boolean modified = false;
             ImmutableList.Builder<PlanNode> builder = ImmutableList.builder();
             for (int i = 0; i < node.getSources().size(); i++) {
-                Expression sourcePredicate = ExpressionTreeRewriter.rewriteWith(new ExpressionSymbolInliner(node.sourceSymbolMap(i)), context.get());
+                Expression sourcePredicate = ExpressionTreeRewriter.rewriteWith(new ExpressionSymbolInliner(node.sourceSymbolMap(i)), context.get().getExpression());
                 PlanNode source = node.getSources().get(i);
-                PlanNode rewrittenSource = context.rewrite(source, sourcePredicate);
+                PlanNode rewrittenSource = context.rewrite(source, new PredicatePushDownContext((sourcePredicate)));
                 if (rewrittenSource != source) {
                     modified = true;
                 }
@@ -248,15 +282,15 @@ public class PredicatePushDown
         }
 
         @Override
-        public PlanNode visitFilter(FilterNode node, RewriteContext<Expression> context)
+        public PlanNode visitFilter(FilterNode node, RewriteContext<PredicatePushDownContext> context)
         {
-            return context.rewrite(node.getSource(), combineConjuncts(node.getPredicate(), context.get()));
+            return context.rewrite(node.getSource(), context.get().setExpression(combineConjuncts(node.getPredicate(), context.get().getExpression())));
         }
 
         @Override
-        public PlanNode visitJoin(JoinNode node, RewriteContext<Expression> context)
+        public PlanNode visitJoin(JoinNode node, RewriteContext<PredicatePushDownContext> context)
         {
-            Expression inheritedPredicate = context.get();
+            Expression inheritedPredicate = context.get().getExpression();
 
             boolean isCrossJoin = (node.getType() == JoinNode.Type.CROSS);
 
@@ -316,8 +350,8 @@ public class PredicatePushDown
                     throw new UnsupportedOperationException("Unsupported join type: " + node.getType());
             }
 
-            PlanNode leftSource = context.rewrite(node.getLeft(), leftPredicate);
-            PlanNode rightSource = context.rewrite(node.getRight(), rightPredicate);
+            PlanNode leftSource = context.rewrite(node.getLeft(), new PredicatePushDownContext(leftPredicate));
+            PlanNode rightSource = context.rewrite(node.getRight(),new PredicatePushDownContext( rightPredicate));
 
             PlanNode output = node;
             if (leftSource != node.getLeft() || rightSource != node.getRight() || !newJoinPredicate.equals(joinPredicate) || isCrossJoin) {
@@ -620,7 +654,7 @@ public class PredicatePushDown
             Preconditions.checkArgument(EnumSet.of(INNER, RIGHT, LEFT, FULL, CROSS).contains(node.getType()), "Unsupported join type: %s", node.getType());
 
             if (node.getType() == JoinNode.Type.CROSS) {
-                return new JoinNode(node.getId(), JoinNode.Type.INNER, node.getLeft(), node.getRight(), node.getCriteria(), node.getLeftHashSymbol(), node.getRightHashSymbol());
+                return new JoinNode(node.getId(), JoinNode.Type.INNER, node.getLeft(), node.getRight(), node.getCriteria(), node.getLeftHashSymbol(), node.getRightHashSymbol(),node.getComparisons());
             }
 
             if (node.getType() == JoinNode.Type.FULL) {
@@ -630,11 +664,11 @@ public class PredicatePushDown
                     return node;
                 }
                 if (canConvertToLeftJoin && canConvertToRightJoin) {
-                    return new JoinNode(node.getId(), INNER, node.getLeft(), node.getRight(), node.getCriteria(), node.getLeftHashSymbol(), node.getRightHashSymbol());
+                    return new JoinNode(node.getId(), INNER, node.getLeft(), node.getRight(), node.getCriteria(), node.getLeftHashSymbol(), node.getRightHashSymbol(),node.getComparisons());
                 }
                 else {
                     return new JoinNode(node.getId(), canConvertToLeftJoin ? LEFT : RIGHT,
-                            node.getLeft(), node.getRight(), node.getCriteria(), node.getLeftHashSymbol(), node.getRightHashSymbol());
+                            node.getLeft(), node.getRight(), node.getCriteria(), node.getLeftHashSymbol(), node.getRightHashSymbol(),node.getComparisons());
                 }
             }
 
@@ -700,9 +734,9 @@ public class PredicatePushDown
         }
 
         @Override
-        public PlanNode visitSemiJoin(SemiJoinNode node, RewriteContext<Expression> context)
+        public PlanNode visitSemiJoin(SemiJoinNode node, RewriteContext<PredicatePushDownContext> context)
         {
-            Expression inheritedPredicate = context.get();
+            Expression inheritedPredicate = context.get().getExpression();
 
             Expression sourceEffectivePredicate = EffectivePredicateExtractor.extract(node.getSource(), symbolAllocator.getTypes());
 
@@ -746,8 +780,8 @@ public class PredicatePushDown
             postJoinConjuncts.addAll(equalityPartition.getScopeComplementEqualities());
             postJoinConjuncts.addAll(equalityPartition.getScopeStraddlingEqualities());
 
-            PlanNode rewrittenSource = context.rewrite(node.getSource(), combineConjuncts(sourceConjuncts));
-            PlanNode rewrittenFilteringSource = context.rewrite(node.getFilteringSource(), combineConjuncts(filteringSourceConjuncts));
+            PlanNode rewrittenSource = context.rewrite(node.getSource(), new PredicatePushDownContext(combineConjuncts(sourceConjuncts)));
+            PlanNode rewrittenFilteringSource = context.rewrite(node.getFilteringSource(), new PredicatePushDownContext(combineConjuncts(filteringSourceConjuncts)));
 
             PlanNode output = node;
             if (rewrittenSource != node.getSource() || rewrittenFilteringSource != node.getFilteringSource()) {
@@ -759,10 +793,23 @@ public class PredicatePushDown
             return output;
         }
 
+		Map<Symbol, List<Symbol>> mappings = new HashMap<Symbol, List<Symbol>>();
+		Map<FunctionCall, FunctionCall> symbolToColumnAggregation;
         @Override
-        public PlanNode visitAggregation(AggregationNode node, RewriteContext<Expression> context)
+        public PlanNode visitAggregation(AggregationNode node, RewriteContext<PredicatePushDownContext> context)
         {
-            Expression inheritedPredicate = context.get();
+        	try {
+				symbolToColumnAggregation = AggregateFunctionSymbolMappingResolver
+						.resolve(node, customizedPredicatePushDownContext
+								.getSymbolToExpressionMap());
+				// }
+			} catch (Exception e) {
+				symbolToColumnAggregation = null;
+			}
+        	List<Symbol> testList = new ArrayList<Symbol>();
+			testList = node.getOutputSymbols();
+			
+            Expression inheritedPredicate = context.get().getExpression();
 
             EqualityInference equalityInference = createEqualityInference(inheritedPredicate);
 
@@ -790,10 +837,34 @@ public class PredicatePushDown
             postAggregationConjuncts.addAll(equalityPartition.getScopeComplementEqualities());
             postAggregationConjuncts.addAll(equalityPartition.getScopeStraddlingEqualities());
 
-            PlanNode rewrittenSource = context.rewrite(node.getSource(), combineConjuncts(pushdownConjuncts));
+			Map<Symbol, FunctionCall> aggregations = node.getAggregations();
+			List<Symbol> groupBy = node.getGroupBy();
+//			context.get().setGroupBy(groupBy);
+//			context.get().setAggregations(aggregations);
+//			context.get().setFunctionMap(node.getFunctions());
+//			context.get().setExpression(combineConjuncts(pushdownConjuncts));
+			PredicatePushDownContext predicatePushDownContext=new PredicatePushDownContext(combineConjuncts(pushdownConjuncts));
+			predicatePushDownContext.setAggregations(aggregations);
+			predicatePushDownContext.setGroupBy(groupBy);
+			predicatePushDownContext.setFunctionMap(node.getFunctions());
+            PlanNode rewrittenSource = context.rewrite(node.getSource(), predicatePushDownContext);
 
             PlanNode output = node;
-            if (rewrittenSource != node.getSource()) {
+            if (predicatePushDownContext.getAggregations() != null
+					&& predicatePushDownContext.getGroupBy() != null
+					&& predicatePushDownContext.getFunctionMap() != null
+					&& (predicatePushDownContext.getFunctionMap() != node.getFunctions()
+						|| predicatePushDownContext.getAggregations() != node.getAggregations() 
+						|| predicatePushDownContext.getGroupBy() != node.getGroupBy())) {
+				output = new AggregationNode(node.getId(), rewrittenSource,
+						predicatePushDownContext.getGroupBy(),
+						predicatePushDownContext.getAggregations(),
+						predicatePushDownContext.getFunctionMap(),
+						node.getMasks(), node.getStep(),
+						node.getSampleWeight(),
+						node.getConfidence(),
+						node.getHashSymbol());
+			} else if  (rewrittenSource != node.getSource()) {
                 output = new AggregationNode(node.getId(),
                         rewrittenSource,
                         node.getGroupBy(),
@@ -805,6 +876,36 @@ public class PredicatePushDown
                         node.getConfidence(),
                         node.getHashSymbol());
             }
+            
+            List<Symbol> testList2 = output.getOutputSymbols();
+			boolean matched = true;
+			for (Symbol symbol : testList) {
+				if (!testList2.contains(symbol)) {
+					matched = false;
+				}
+			}
+			boolean replaceOutput=true;
+			if (!matched) {
+				Map<Symbol, Expression> hashMap2 = new HashMap<Symbol, Expression>();
+
+				for (Symbol s : node.getOutputSymbols()) {
+					if (output.getOutputSymbols().contains(s)) {
+						hashMap2.put(s,
+								new QualifiedNameReference(s.toQualifiedName()));
+					} else {
+						if(!modifiMap.containsKey(s)){
+							System.out.println("ERROR:Possible missing case for: Symbol "+s+" aggregates:"+node.getAggregations());
+							replaceOutput=false;
+							break;
+						}
+						hashMap2.put(s, modifiMap.get(s));
+					}
+				}
+				if(replaceOutput){
+				output = new ProjectNode(idAllocator.getNextId(), output,
+						hashMap2);
+				}
+			}
             if (!postAggregationConjuncts.isEmpty()) {
                 output = new FilterNode(idAllocator.getNextId(), output, combineConjuncts(postAggregationConjuncts));
             }
@@ -812,9 +913,9 @@ public class PredicatePushDown
         }
 
         @Override
-        public PlanNode visitUnnest(UnnestNode node, RewriteContext<Expression> context)
+        public PlanNode visitUnnest(UnnestNode node, RewriteContext<PredicatePushDownContext> context)
         {
-            Expression inheritedPredicate = context.get();
+            Expression inheritedPredicate = context.get().getExpression();
 
             EqualityInference equalityInference = createEqualityInference(inheritedPredicate);
 
@@ -842,7 +943,7 @@ public class PredicatePushDown
             postUnnestConjuncts.addAll(equalityPartition.getScopeComplementEqualities());
             postUnnestConjuncts.addAll(equalityPartition.getScopeStraddlingEqualities());
 
-            PlanNode rewrittenSource = context.rewrite(node.getSource(), combineConjuncts(pushdownConjuncts));
+            PlanNode rewrittenSource = context.rewrite(node.getSource(), new PredicatePushDownContext( combineConjuncts(pushdownConjuncts)));
 
             PlanNode output = node;
             if (rewrittenSource != node.getSource()) {
@@ -855,16 +956,385 @@ public class PredicatePushDown
         }
 
         @Override
-        public PlanNode visitSample(SampleNode node, RewriteContext<Expression> context)
+        public PlanNode visitSample(SampleNode node, RewriteContext<PredicatePushDownContext> context)
         {
             return context.defaultRewrite(node, context.get());
         }
 
         @Override
-        public PlanNode visitTableScan(TableScanNode node, RewriteContext<Expression> context)
+        public PlanNode visitTableScan(TableScanNode node, RewriteContext<PredicatePushDownContext> context)
         {
-            Expression predicate = simplifyExpression(context.get());
+        	PredicatePushDownContext predicatePushDownContext = customizedPredicatePushDownContext
+					.getPushDownPredicateMap().get(node);
+			if (predicatePushDownContext != null) {
+				context.get().setExpression(predicatePushDownContext
+						.getExpression());
+				context.get().setAggregations(predicatePushDownContext
+						.getAggregations());
+				context.get().setFunctionMap(predicatePushDownContext
+						.getFunctionMap());
+				context.get().setGroupBy(predicatePushDownContext
+						.getGroupBy());
+			}
+			PredicatePushDownContext inheritedPredicate = context.get();
+            Expression predicate = simplifyExpression(context.get().getExpression());
 
+			Iterable<Expression> pushDownAggregationListIterable = null;
+			Iterable<Symbol> groupByIterable = null;
+			List<Symbol> distinctColumns = new ArrayList<Symbol>();
+			// should be push down group by columns to proteum
+			Set<Expression> pushDownAggregationList = new HashSet<Expression>();
+			boolean shouldPushDownAggregation = false;
+			boolean isModified = false;
+			boolean weUnderStandAllAggregations = true;
+			Map<Symbol, FunctionCall> newMap = new HashMap<Symbol, FunctionCall>();
+			Map<Symbol, Signature> functionMap = new HashMap<Symbol, Signature>();
+			Map<Symbol, Expression> modifiTempMap = new HashMap<Symbol, Expression>();
+			final Map<Symbol, QualifiedNameReference> symbolToColumnName = new HashMap<Symbol, QualifiedNameReference>();
+			// global variable ends
+			try {
+				if ((inheritedPredicate.getAggregations() != null && !inheritedPredicate
+						.getAggregations().isEmpty())
+						|| (inheritedPredicate.getGroupBy() != null && !inheritedPredicate
+								.getGroupBy().isEmpty())) {
+					for (Map.Entry<Symbol, ColumnHandle> entry : node
+							.getAssignments().entrySet()) {
+						symbolToColumnName.put(
+								entry.getKey(),
+								new QualifiedNameReference(new QualifiedName(
+										metadata.getColumnMetadata(
+												node.getTable(),
+												entry.getValue()).getName())));
+					}
+
+					Function<Expression, Expression> ff = new Function<Expression, Expression>() {
+						@Override
+						public Expression apply(Expression expression) {
+							return ExpressionTreeRewriter.rewriteWith(
+									new ExpressionSymbolInliner(
+											symbolToColumnName), expression);
+						}
+					};
+
+					Function<Symbol, Symbol> syFunction = new Function<Symbol, Symbol>() {
+						@Override
+						public Symbol apply(Symbol symbol) {
+							return new Symbol(symbolToColumnName.get(symbol)
+									.getName().toString());
+						}
+					};
+
+					List<Expression> aggregateList = new ArrayList<Expression>();
+					aggregateList.addAll(inheritedPredicate.getAggregations()
+							.values());
+					Iterable<Expression> simplifiedAggregates = transform(
+							aggregateList, ff);
+					// System.out.println(simplifiedAggregates);
+
+					groupByIterable = transform(
+							inheritedPredicate.getGroupBy(), syFunction);
+					// System.out.println(groupByIterable);
+					if (inheritedPredicate.getGroupBy() != null) {
+						shouldPushDownAggregation = true;
+						for (Entry<Symbol, FunctionCall> entry : inheritedPredicate
+								.getAggregations().entrySet()) {
+							FunctionCall columnNamedfunctioncall = symbolToColumnAggregation
+									.get(entry.getValue());
+							System.out.println(entry.getValue()
+									+ " is Resolved as "
+									+ columnNamedfunctioncall);
+							if (isContainsOnlyOneColumn(entry.getValue())
+									&& (entry.getValue().getArguments().get(0) instanceof QualifiedNameReference)
+									&& containsAnyAggregates(groupByIterable,
+											entry.getValue())) {
+								// here is functions on dimensions -----
+								// Cheers!!!:We need nothing to do here.
+								newMap.put(entry.getKey(), entry.getValue());
+								functionMap.put(entry.getKey(),
+										inheritedPredicate.getFunctionMap()
+												.get(entry.getKey()));
+							} else if (entry.getValue().isDistinct()
+									&& isContainsOnlyOneColumn(entry.getValue())
+									&& (entry.getValue().getArguments().get(0) instanceof QualifiedNameReference)
+									&& isAloneOverAllOtherAggregations(entry
+											.getValue())
+									&& !containsAnyAggregates(groupByIterable,
+											entry.getValue())
+									&& !areArgumentsExpression(entry.getValue())) {
+								// Distinct columns here.
+
+								Symbol tempSymbol = new Symbol(
+										((QualifiedNameReference) entry
+												.getValue().getArguments()
+												.get(0)).getName().toString());
+								QualifiedNameReference qualifiedNameReference = symbolToColumnName
+										.get(tempSymbol);
+								if (qualifiedNameReference == null) {
+									shouldPushDownAggregation = false;
+								} else {
+									distinctColumns
+											.add(Symbol
+													.fromQualifiedName(qualifiedNameReference
+															.getName()));
+									shouldPushDownAggregation = true;
+									newMap.put(entry.getKey(), entry.getValue());
+									functionMap.put(entry.getKey(),
+											inheritedPredicate.getFunctionMap()
+													.get(entry.getKey()));
+								}
+							} else if (!entry.getValue().isDistinct()
+									&& entry.getValue().getName().toString()
+											.equalsIgnoreCase("SUM")
+									&& isContainsOnlyOneColumn(entry.getValue())
+									&& (entry.getValue().getArguments().get(0) instanceof QualifiedNameReference)
+									&& isContainsOnlyOneBigIntColumn(
+											entry.getValue(), symbolAllocator)
+									&& isAloneOverAllOtherAggregations(entry
+											.getValue())
+									&& !containsAnyAggregates(groupByIterable,
+											entry.getValue())) {
+								 shouldPushDownAggregation = true;
+								if (entry.getKey().getName().contains("count")) {
+									pushDownAggregationList
+											.add(changeSumFunctionToCount(symbolToColumnAggregation
+													.get(entry.getValue())));
+								} else {
+									pushDownAggregationList
+											.add(symbolToColumnAggregation
+													.get(entry.getValue()));
+								}
+								if (areArgumentsExpression(entry.getValue())) {
+									modifiTempMap
+											.put(new Symbol(
+													((QualifiedNameReference) entry
+															.getValue()
+															.getArguments()
+															.get(0)).getName()
+															.toString()),
+													new QualifiedNameReference(
+															getArgumentsAsSymbolList(
+																	entry.getValue())
+																	.get(0)
+																	.toQualifiedName()));
+									Symbol symbol = new Symbol(
+											((QualifiedNameReference) entry
+													.getValue().getArguments()
+													.get(0)).getName()
+													.toString());
+									Type type = symbolAllocator.getTypes().get(
+											symbol);
+									if (type.getDisplayName().equalsIgnoreCase(
+											"double")) {
+										modifiTempMap
+												.put(symbol,
+														new Cast(
+																new QualifiedNameReference(
+																		getArgumentsAsSymbolList(
+																				entry.getValue())
+																				.get(0)
+																				.toQualifiedName()),
+																DoubleType.DOUBLE
+																		.getTypeSignature()
+																		.toString()));
+										newMap.put(entry.getKey(),
+												entry.getValue());
+										functionMap
+												.put(entry.getKey(),
+														inheritedPredicate
+																.getFunctionMap()
+																.get(entry
+																		.getKey()));
+									} else {
+										newMap.put(entry.getKey(),
+												entry.getValue());
+										functionMap
+												.put(entry.getKey(),
+														inheritedPredicate
+																.getFunctionMap()
+																.get(entry
+																		.getKey()));
+									}
+									isModified = true;
+								}else{
+									newMap.put(entry.getKey(), entry.getValue());
+									functionMap.put(entry.getKey(),
+											inheritedPredicate.getFunctionMap()
+													.get(entry.getKey()));
+								}
+							} else if (!entry.getValue().isDistinct()
+									&& entry.getValue().getName().toString()
+											.equalsIgnoreCase("SUM")
+									&& isContainsOnlyTwoColumn(entry.getValue())
+									&& (entry.getValue().getArguments().get(0) instanceof QualifiedNameReference)
+									&& isContainsOnlyTwoBigIntColumn(
+											entry.getValue(), symbolAllocator)
+									&& isAloneOverAllOtherAggregations(entry
+											.getValue())
+									&& !containsAnyAggregates(groupByIterable,
+											entry.getValue())) {
+								// shouldPushDownAggregation = true;
+								// if
+								// (entry.getKey().getName().contains("count"))
+								// {
+								// pushDownAggregationList
+								// .add(changeSumFunctionToCount(symbolToColumnAggregation
+								// .get(entry.getValue())));
+								// } else {
+								pushDownAggregationList
+										.add(symbolToColumnAggregation
+												.get(entry.getValue()));
+								// }
+								if (areArgumentsExpression(entry.getValue())) {
+									modifiTempMap
+											.put(new Symbol(
+													((QualifiedNameReference) entry
+															.getValue()
+															.getArguments()
+															.get(0)).getName()
+															.toString()),
+													new QualifiedNameReference(
+															getArgumentsAsSymbolList(
+																	entry.getValue())
+																	.get(0)
+																	.toQualifiedName()));
+									isModified = true;
+								}
+								newMap.put(entry.getKey(), entry.getValue());
+								functionMap.put(entry.getKey(),
+										inheritedPredicate.getFunctionMap()
+												.get(entry.getKey()));
+							} else if (!entry.getValue().isDistinct()
+									&& entry.getValue().getName().toString()
+											.equalsIgnoreCase("Count")
+									&& isContainsOnlyOneColumn(entry.getValue())
+									&& (entry.getValue().getArguments().get(0) instanceof QualifiedNameReference)
+									&& isContainsOnlyOneBigIntColumn(
+											entry.getValue(), symbolAllocator)
+									&& isAloneOverAllOtherAggregations(entry
+											.getValue())
+									&& !containsAnyAggregates(groupByIterable,
+											entry.getValue())
+									&& !areArgumentsExpression(entry.getValue())) {
+								Symbol s = symbolAllocator.newSymbol(entry
+										.getKey().getName(), BigintType.BIGINT);
+								FunctionCall functionCall = new FunctionCall(
+										new QualifiedName("sum"), entry
+												.getValue().getArguments());
+								newMap.put(s, functionCall);
+								Symbol sss = new Symbol(
+										((QualifiedNameReference) entry
+												.getValue().getArguments()
+												.get(0)).getName().toString());
+								String[] arr = new String[] { symbolAllocator
+										.getTypes().get(sss).getDisplayName() };
+								// System.out.println(arr);
+								functionMap
+										.put(s, new Signature("sum", "bigint",
+												java.util.Arrays.asList(arr)));
+								modifiTempMap
+										.put(entry.getKey(),
+												new QualifiedNameReference(
+														new QualifiedName(s
+																.getName())));
+								isModified = true;
+								shouldPushDownAggregation = true;
+								pushDownAggregationList.add(entry.getValue());
+								// System.out.println(entry.getKey() + " "
+								// + entry.getValue());
+							} else {
+								// newMap.put(entry.getKey(), entry.getValue());
+								// functionMap.put(entry.getKey(),
+								// inheritedPredicate
+								// .getFunctionMap().get(entry.getKey()));
+								// Sorry We don,t understand the case : Let's
+								// presto
+								// handle everything
+								shouldPushDownAggregation = false;
+								break;
+							}
+						}
+					}
+					if (shouldPushDownAggregation) {
+						pushDownAggregationListIterable = transform(
+								pushDownAggregationList, ff);
+					}
+				}
+				System.out.println("******************************");
+				if (shouldPushDownAggregation) {
+					List<Symbol> groupByPushDownable = Lists.newArrayList(Lists
+							.newArrayList(groupByIterable));
+					groupByPushDownable.addAll(distinctColumns);
+					groupByIterable = groupByPushDownable;
+					System.out.println("PushDownAggregationList is "
+							+ pushDownAggregationListIterable);
+					System.out.println("PushDownGroupBy is " + groupByIterable);
+				} else {
+					System.out.println("Nothing to pushDown");
+				}
+
+			} catch (Exception e) {
+				System.out.println("Unable to Push Down Group By.Exception: "
+						+ e.getMessage());
+			}
+			
+			ProteumTupleDomain<ColumnHandle> proteumTupleDomain2 = new ProteumTupleDomain<ColumnHandle>(
+					java.util.Collections.emptyMap(), predicate);
+			TupleDomain<ColumnHandle> proteumTupleDomain = proteumTupleDomain2;
+			if (pushDownAggregationListIterable != null
+					&& groupByIterable != null && shouldPushDownAggregation) {
+				proteumTupleDomain2.setGroupBy(groupByIterable);
+				proteumTupleDomain2
+						.setAggregateList(pushDownAggregationListIterable);
+				proteumTupleDomain2.setMinimumExpression(FilterRewriter
+						.remainingAfterRemovingAggregateFilterExpression(
+								symbolAllocator.getTypes(), groupByIterable,
+								symbolToColumnName,
+								inheritedPredicate.getExpression()));
+			}
+			((MetadataManager)metadata).isAggregatePushDownable(node.getTable(), Optional.of(proteumTupleDomain));
+			Expression postScanPredicate=predicate;
+			Expression allExpression = postScanPredicate;
+
+			if (proteumTupleDomain2.isAggregatePushDownable()
+					&& shouldPushDownAggregation) {
+				if (isModified) {
+					inheritedPredicate.setAggregations(newMap);
+					inheritedPredicate.setFunctionMap(functionMap);
+					modifiMap.putAll(modifiTempMap);
+				}
+				System.out
+						.println("Actual Filter is "
+								+ postScanPredicate
+								+ " Aggregate filter is "
+								+ FilterRewriter.getAggregateFilterExpression(
+										symbolAllocator.getTypes(),
+										groupByIterable, symbolToColumnName,
+										postScanPredicate)
+								+ " Remaining is "
+								+ FilterRewriter
+										.remainingAfterRemovingAggregateFilterExpression(
+												symbolAllocator.getTypes(),
+												groupByIterable,
+												symbolToColumnName,
+												postScanPredicate));
+				Expression postScanPredicate2 = postScanPredicate;
+				postScanPredicate = FilterRewriter
+						.getAggregateFilterExpression(
+								symbolAllocator.getTypes(), groupByIterable,
+								symbolToColumnName, postScanPredicate);
+				System.out.println("Changed Filter from " + postScanPredicate2
+						+ " to " + postScanPredicate);
+				predicate=postScanPredicate;
+			}
+			System.out.println("******************************");
+			if (proteumTupleDomain2.isAggregatePushDownable()
+					&& shouldPushDownAggregation) {
+				customizedPredicatePushDownContext.getPushDownPredicateMap()
+						.put(node,
+								new PredicatePushDownContext(allExpression,
+										inheritedPredicate));
+			}
+			node.setProteumTupleDomain(proteumTupleDomain2);
             if (BooleanLiteral.FALSE_LITERAL.equals(predicate) || predicate instanceof NullLiteral) {
                 return new ValuesNode(idAllocator.getNextId(), node.getOutputSymbols(), ImmutableList.of());
             }
@@ -874,5 +1344,217 @@ public class PredicatePushDown
 
             return node;
         }
+    	private List<Symbol> getArgumentsAsSymbolList(FunctionCall value) {
+			final List<Symbol> columns = new ArrayList<Symbol>();
+			symbolToColumnAggregation
+					.get(value)
+					.accept(new DefaultExpressionTraversalVisitor<List<Symbol>, List<Symbol>>() {
+						@Override
+						protected List<Symbol> visitQualifiedNameReference(
+								QualifiedNameReference node,
+								List<Symbol> columns) {
+							columns.add(new Symbol(node.getName().toString()));
+							return columns;
+						}
+					}, columns);
+			return columns;
+		}
+
+		private boolean areArgumentsExpression(FunctionCall value) {
+			if (symbolToColumnAggregation.get(value).equals(value)) {
+				return false;
+			} else {
+				return true;
+			}
+		}
+
+		private boolean isContainsOnlyOneBigIntColumn(FunctionCall value,
+				SymbolAllocator symbolAllocator) {
+			final List<Symbol> columns = new ArrayList<Symbol>();
+			symbolToColumnAggregation
+					.get(value)
+					.accept(new DefaultExpressionTraversalVisitor<List<Symbol>, List<Symbol>>() {
+						@Override
+						protected List<Symbol> visitQualifiedNameReference(
+								QualifiedNameReference node,
+								List<Symbol> columns) {
+							columns.add(new Symbol(node.getName().toString()));
+							return columns;
+						}
+					}, columns);
+			if (columns.size() == 1) {
+				Symbol columnName = columns.get(0);
+				return symbolAllocator.getTypes().get(columnName)
+						.getDisplayName().equals(BigintType.BIGINT.toString());
+			}
+			return false;
+		}
+
+		private boolean isContainsOnlyTwoBigIntColumn(FunctionCall value,
+				SymbolAllocator symbolAllocator) {
+			final List<Symbol> columns = new ArrayList<Symbol>();
+			symbolToColumnAggregation
+					.get(value)
+					.accept(new DefaultExpressionTraversalVisitor<List<Symbol>, List<Symbol>>() {
+						@Override
+						protected List<Symbol> visitQualifiedNameReference(
+								QualifiedNameReference node,
+								List<Symbol> columns) {
+							columns.add(new Symbol(node.getName().toString()));
+							return columns;
+						}
+					}, columns);
+			if (columns.size() == 2) {
+				Symbol columnName = columns.get(0);
+				boolean ret = symbolAllocator.getTypes().get(columnName)
+						.getDisplayName().equals(BigintType.BIGINT.toString());
+				if (!ret) {
+					return ret;
+				}
+				columnName = columns.get(1);
+				return symbolAllocator.getTypes().get(columnName)
+						.getDisplayName().equals(BigintType.BIGINT.toString());
+			}
+			return false;
+		}
+
+		private boolean isAloneOverAllOtherAggregations(FunctionCall value) {
+			Map<FunctionCall, Set<Symbol>> functionCallToResolvedColumnName = new HashMap<FunctionCall, Set<Symbol>>();
+			for (FunctionCall key : symbolToColumnAggregation.keySet()) {
+				final Set<Symbol> columns = new HashSet<Symbol>();
+				symbolToColumnAggregation
+						.get(key)
+						.accept(new DefaultExpressionTraversalVisitor<Set<Symbol>, Set<Symbol>>() {
+							@Override
+							protected Set<Symbol> visitQualifiedNameReference(
+									QualifiedNameReference node,
+									Set<Symbol> columns) {
+								columns.add(new Symbol(node.getName()
+										.toString()));
+								return columns;
+							}
+						}, columns);
+				functionCallToResolvedColumnName.put(key, columns);
+			}
+			Set<Symbol> set = new HashSet<Symbol>();
+			for (Entry<FunctionCall, Set<Symbol>> map : functionCallToResolvedColumnName
+					.entrySet()) {
+				set.clear();
+				set.addAll(functionCallToResolvedColumnName.get(value));
+				if (map.getKey().equals(value)) {
+					continue;
+				}
+				set.retainAll(map.getValue());
+				if (set.size() > 0) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		private boolean isContainsOnlyOneColumn(FunctionCall value) {
+
+			final List<Symbol> columns = new ArrayList<Symbol>();
+			symbolToColumnAggregation
+					.get(value)
+					.accept(new DefaultExpressionTraversalVisitor<List<Symbol>, List<Symbol>>() {
+						@Override
+						protected List<Symbol> visitQualifiedNameReference(
+								QualifiedNameReference node,
+								List<Symbol> columns) {
+							columns.add(new Symbol(node.getName().toString()));
+							return columns;
+						}
+					}, columns);
+			if (columns.size() == 1) {
+				return true;
+			}
+			return false;
+		}
+
+		private boolean isContainsOnlyTwoColumn(FunctionCall value) {
+
+			final List<Symbol> columns = new ArrayList<Symbol>();
+			symbolToColumnAggregation
+					.get(value)
+					.accept(new DefaultExpressionTraversalVisitor<List<Symbol>, List<Symbol>>() {
+						@Override
+						protected List<Symbol> visitQualifiedNameReference(
+								QualifiedNameReference node,
+								List<Symbol> columns) {
+							columns.add(new Symbol(node.getName().toString()));
+							return columns;
+						}
+					}, columns);
+			if (columns.size() == 2) {
+				return true;
+			}
+			return false;
+		}
+
+		private FunctionCall changeSumFunctionToCount(FunctionCall value) {
+			if (value.getName().toString().equalsIgnoreCase("sum")) {
+				return new FunctionCall(new QualifiedName("count"),
+						value.getArguments());
+			} else {
+				return value;
+			}
+		}
+
+		private boolean containsAnyAggregates(
+				Iterable<Symbol> simplifiedAggregates, FunctionCall value) {
+			final List<Symbol> columns = new ArrayList<Symbol>();
+			symbolToColumnAggregation
+					.get(value)
+					.accept(new DefaultExpressionTraversalVisitor<List<Symbol>, List<Symbol>>() {
+						@Override
+						protected List<Symbol> visitQualifiedNameReference(
+								QualifiedNameReference node,
+								List<Symbol> columns) {
+							columns.add(new Symbol(node.getName().toString()));
+							return columns;
+						}
+					}, columns);
+			Set<Symbol> hashSet = new HashSet<Symbol>();
+			for (Symbol symbol : simplifiedAggregates) {
+				hashSet.add(symbol);
+			}
+			for (Symbol s : columns) {
+				if (!hashSet.contains(s)) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		private boolean isOnly(Symbol symbol,
+				Iterable<Expression> simplifiedAggregates,
+				Map<Symbol, QualifiedNameReference> map6) {
+			boolean found = false;
+			if (map6.get(symbol) == null) {
+				return false;
+			}
+			for (Expression expression : simplifiedAggregates) {
+				FunctionCall functionCall = (FunctionCall) expression;
+				for (Expression e : functionCall.getArguments()) {
+					if (e instanceof QualifiedNameReference) {
+						QualifiedNameReference qualifiedNameReference = (QualifiedNameReference) e;
+						if (qualifiedNameReference
+								.getName()
+								.toString()
+								.equalsIgnoreCase(
+										map6.get(symbol).getName().toString())) {
+							if (!found) {
+								found = true;
+							} else {
+								return false;
+							}
+						}
+					}
+				}
+			}
+			return true;
+		}
+
     }
 }

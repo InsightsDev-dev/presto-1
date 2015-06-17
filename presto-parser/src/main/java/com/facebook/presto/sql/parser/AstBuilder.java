@@ -1112,6 +1112,22 @@ class AstBuilder
                 return ComparisonExpression.Type.GREATER_THAN;
             case SqlBaseLexer.GTE:
                 return ComparisonExpression.Type.GREATER_THAN_OR_EQUAL;
+            case SqlBaseLexer.LCR:
+                return ComparisonExpression.Type.LEFT_CONTAINS_RIGHT;
+            case SqlBaseLexer.RCL:
+                return ComparisonExpression.Type.RIGHT_CONTAINS_LEFT;
+            case SqlBaseLexer.OW:
+                return ComparisonExpression.Type.OVERLAPPING_WITH;
+            case SqlBaseLexer.SL:
+                return ComparisonExpression.Type.STRICTLY_LEFT;
+            case SqlBaseLexer.SR:
+                return ComparisonExpression.Type.STRICTLY_RIGHT;
+            case SqlBaseLexer.AW:
+                return ComparisonExpression.Type.ADJACENT_WITH;
+            case SqlBaseLexer.NR:
+                return ComparisonExpression.Type.NOT_RIGHT;
+            case SqlBaseLexer.NL:
+                return ComparisonExpression.Type.NOT_LEFT;
         }
 
         throw new IllegalArgumentException("Unsupported operator: " + symbol.getText());

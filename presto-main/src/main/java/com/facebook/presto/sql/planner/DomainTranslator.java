@@ -311,6 +311,10 @@ public final class DomainTranslator
         @Override
         protected ExtractionResult visitComparisonExpression(ComparisonExpression node, Boolean complement)
         {
+        	if (containsComplexType(node.getType())){
+                return super.visitComparisonExpression(node, complement);
+        	}
+
             if (isSimpleMagicLiteralComparison(node)) {
                 node = normalizeSimpleComparison(node);
                 node = convertMagicLiteralComparison(node);
@@ -319,7 +323,6 @@ public final class DomainTranslator
                 node = normalizeSimpleComparison(node);
             }
             else {
-            if (!isSimpleComparison(node) || containsComplexType(node.getType())) {
                 return super.visitComparisonExpression(node, complement);
             }
 
@@ -356,7 +359,7 @@ public final class DomainTranslator
             }
         }
 
-        private ExtractionResult createComparisonExtractionResult(ComparisonExpression.Type comparisonType, ColumnHandle columnHandle, Type columnType, Comparable<?> value, boolean complement)
+        private ExtractionResult createComparisonExtractionResult(ComparisonExpression.Type comparisonType, Symbol column, Type columnType, Comparable<?> value, boolean complement)
         {
             if (value == null) {
                 switch (comparisonType) {

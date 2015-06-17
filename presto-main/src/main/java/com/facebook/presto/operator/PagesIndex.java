@@ -379,17 +379,18 @@ public class PagesIndex
                 .toString();
     }
     
-    public LookupSource createCustomizedLookupSource(List<Integer> joinChannels)
+    public LookupSource createCustomizedLookupSource(List<Integer> joinChannels,Optional<Integer> hashChannel)
     {
         PagesHashStrategy hashStrategy = new CustomizedSimplePagesHashStrategy(
                 types,
                 ImmutableList.<List<Block>>copyOf(channels),
-                joinChannels);
+                joinChannels,
+                hashChannel);
 
         ImmutableList.Builder<Type> hashTypes = ImmutableList.builder();
         for (Integer channel : joinChannels) {
             hashTypes.add(types.get(channel));
         }
-        return new CustomizedInMemoryJoinHash(valueAddresses, hashTypes.build(), hashStrategy, operatorContext);
+        return new CustomizedInMemoryJoinHash(valueAddresses, hashTypes.build(), hashStrategy);
     }
 }

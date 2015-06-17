@@ -240,7 +240,7 @@ timeZoneSpecifier
     ;
 
 comparisonOperator
-    : EQ | NEQ | LT | LTE | GT | GTE
+    : EQ | NEQ | LT | LTE | GT | GTE | LCR | RCL | OW | SL | SR | AW | NR | NL 
     ;
 
 booleanValue
@@ -471,6 +471,14 @@ LT  : '<';
 LTE : '<=';
 GT  : '>';
 GTE : '>=';
+LCR : '@>';
+RCL : '<@';
+OW  : '&&';
+SL  : '<<';
+SR  : '>>';
+AW  : '-|-';
+NR  : '&<';
+NL  : '&>';
 
 PLUS: '+';
 MINUS: '-';

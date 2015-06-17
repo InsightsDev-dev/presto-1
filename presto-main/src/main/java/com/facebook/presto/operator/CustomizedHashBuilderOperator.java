@@ -17,18 +17,19 @@ import com.facebook.presto.spi.Page;
 import com.facebook.presto.spi.type.Type;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.util.concurrent.ListenableFuture;
 
 import javax.annotation.concurrent.ThreadSafe;
 
 import java.util.List;
+import java.util.Optional;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+
 /**
  * 
  * @author dilip kasana
- * @Date  13-Feb-2015
+ * @Date 13-Feb-2015
  */
 @ThreadSafe
 public class CustomizedHashBuilderOperator implements Operator {
@@ -37,12 +38,14 @@ public class CustomizedHashBuilderOperator implements Operator {
 		private final int operatorId;
 		private final SettableLookupSourceSupplier lookupSourceSupplier;
 		private final List<Integer> hashChannels;
+		private final Optional<Integer> hashChannel;
+
 		private final int expectedPositions;
 		private boolean closed;
 
 		public CustomizedHashBuilderOperatorFactory(int operatorId,
 				List<Type> types, List<Integer> hashChannels,
-				int expectedPositions) {
+				Optional<Integer> hashChannel, int expectedPositions) {
 			this.operatorId = operatorId;
 			this.lookupSourceSupplier = new SettableLookupSourceSupplier(
 					checkNotNull(types, "types is null"));
@@ -51,6 +54,7 @@ public class CustomizedHashBuilderOperator implements Operator {
 					"hashChannels is empty");
 			this.hashChannels = ImmutableList.copyOf(checkNotNull(hashChannels,
 					"hashChannels is null"));
+			this.hashChannel = checkNotNull(hashChannel, "hashChannel is null");
 
 			this.expectedPositions = checkNotNull(expectedPositions,
 					"expectedPositions is null");
@@ -71,7 +75,8 @@ public class CustomizedHashBuilderOperator implements Operator {
 			OperatorContext operatorContext = driverContext.addOperatorContext(
 					operatorId, HashBuilderOperator.class.getSimpleName());
 			return new CustomizedHashBuilderOperator(operatorContext,
-					lookupSourceSupplier, hashChannels, expectedPositions);
+					lookupSourceSupplier, hashChannels, hashChannel,
+					expectedPositions);
 		}
 
 		@Override
@@ -83,6 +88,7 @@ public class CustomizedHashBuilderOperator implements Operator {
 	private final OperatorContext operatorContext;
 	private final SettableLookupSourceSupplier lookupSourceSupplier;
 	private final List<Integer> hashChannels;
+	private final Optional<Integer> hashChannel;
 
 	private final PagesIndex pagesIndex;
 
@@ -90,7 +96,8 @@ public class CustomizedHashBuilderOperator implements Operator {
 
 	public CustomizedHashBuilderOperator(OperatorContext operatorContext,
 			SettableLookupSourceSupplier lookupSourceSupplier,
-			List<Integer> hashChannels, int expectedPositions) {
+			List<Integer> hashChannels, Optional<Integer> hashChannel,
+			int expectedPositions) {
 		this.operatorContext = checkNotNull(operatorContext,
 				"operatorContext is null");
 
@@ -101,9 +108,10 @@ public class CustomizedHashBuilderOperator implements Operator {
 				"hashChannels is empty");
 		this.hashChannels = ImmutableList.copyOf(checkNotNull(hashChannels,
 				"hashChannels is null"));
+		this.hashChannel = checkNotNull(hashChannel, "hashChannel is null");
 
 		this.pagesIndex = new PagesIndex(lookupSourceSupplier.getTypes(),
-				expectedPositions, operatorContext);
+				expectedPositions);
 	}
 
 	@Override
@@ -122,7 +130,10 @@ public class CustomizedHashBuilderOperator implements Operator {
 			return;
 		}
 
-		LookupSource lookupSource = pagesIndex.createCustomizedLookupSource(hashChannels);
+		LookupSource lookupSource = pagesIndex.createCustomizedLookupSource(hashChannels,
+				hashChannel);
+		operatorContext.setMemoryReservation(pagesIndex.getEstimatedSize()
+				.toBytes() + lookupSource.getInMemorySizeInBytes());
 		lookupSourceSupplier.setLookupSource(lookupSource);
 		finished = true;
 	}
@@ -130,11 +141,6 @@ public class CustomizedHashBuilderOperator implements Operator {
 	@Override
 	public boolean isFinished() {
 		return finished;
-	}
-
-	@Override
-	public ListenableFuture<?> isBlocked() {
-		return NOT_BLOCKED;
 	}
 
 	@Override
@@ -148,6 +154,8 @@ public class CustomizedHashBuilderOperator implements Operator {
 		checkState(!isFinished(), "Operator is already finished");
 
 		pagesIndex.addPage(page);
+		operatorContext.setMemoryReservation(pagesIndex.getEstimatedSize()
+				.toBytes());
 		operatorContext.recordGeneratedOutput(page.getSizeInBytes(),
 				page.getPositionCount());
 	}

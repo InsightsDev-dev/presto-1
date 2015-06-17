@@ -14,16 +14,18 @@
 package com.facebook.presto.operator;
 
 import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.spi.Page;
 import com.facebook.presto.spi.PageBuilder;
 import com.facebook.presto.spi.block.Block;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.sql.gen.FilterJoinCondition;
 import com.google.common.collect.ImmutableList;
 import com.google.common.primitives.Ints;
-
-import io.airlift.slice.Murmur3;
+import io.airlift.slice.XxHash64;
 import it.unimi.dsi.fastutil.HashCommon;
+import it.unimi.dsi.fastutil.longs.AbstractLongIterator;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
+import it.unimi.dsi.fastutil.longs.LongIterator;
 
 import java.util.Arrays;
 import java.util.List;
@@ -31,148 +33,211 @@ import java.util.List;
 import static com.facebook.presto.operator.SyntheticAddress.decodePosition;
 import static com.facebook.presto.operator.SyntheticAddress.decodeSliceIndex;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.airlift.slice.SizeOf.sizeOfBooleanArray;
 import static io.airlift.slice.SizeOf.sizeOfIntArray;
+
 /**
  * 
  * @author dilip kasana
- * @Date  13-Feb-2015
+ * @Date 13-Feb-2015
  */
 // This implementation assumes arrays used in the hash are always a power of 2
-public final class CustomizedInMemoryJoinHash
-        implements LookupSource
-{
-    private final LongArrayList addresses;
-    private final PagesHashStrategy pagesHashStrategy;
+public final class CustomizedInMemoryJoinHash implements LookupSource {
+	private final LongArrayList addresses;
+	private final PagesHashStrategy pagesHashStrategy;
 
-    private final int channelCount;
-    private final int mask;
-    private final int[] key;
-    private final int[] positionLinks;
-    private final List<Type> hashTypes;
+	private final int channelCount;
+	private final int mask;
+	private final int[] key;
+	private final boolean[] keyVisited;
+	private final int[] positionLinks;
+	private final long size;
+	private final List<Type> hashTypes;
 
-    public CustomizedInMemoryJoinHash(LongArrayList addresses, List<Type> hashTypes, PagesHashStrategy pagesHashStrategy, OperatorContext operatorContext)
-    {
-        this.addresses = checkNotNull(addresses, "addresses is null");
-        this.hashTypes = ImmutableList.copyOf(checkNotNull(hashTypes, "hashTypes is null"));
-        this.pagesHashStrategy = checkNotNull(pagesHashStrategy, "pagesHashStrategy is null");
-        this.channelCount = pagesHashStrategy.getChannelCount();
+	public CustomizedInMemoryJoinHash(LongArrayList addresses,
+			List<Type> hashTypes, PagesHashStrategy pagesHashStrategy) {
+		this.addresses = checkNotNull(addresses, "addresses is null");
+		this.hashTypes = ImmutableList.copyOf(checkNotNull(hashTypes,
+				"hashTypes is null"));
+		this.pagesHashStrategy = checkNotNull(pagesHashStrategy,
+				"pagesHashStrategy is null");
+		this.channelCount = pagesHashStrategy.getChannelCount();
 
-        checkNotNull(operatorContext, "operatorContext is null");
+		// reserve memory for the arrays
+		int hashSize = HashCommon.arraySize(addresses.size(), 0.75f);
+		size = sizeOfIntArray(hashSize) + sizeOfBooleanArray(hashSize)
+				+ sizeOfIntArray(addresses.size());
 
-        // reserve memory for the arrays
-        int hashSize = HashCommon.arraySize(addresses.size(), 0.75f);
-        operatorContext.reserveMemory(sizeOfIntArray(hashSize) + sizeOfIntArray(addresses.size()));
+		mask = hashSize - 1;
+		key = new int[hashSize];
+		keyVisited = new boolean[hashSize];
+		Arrays.fill(key, -1);
 
-        mask = hashSize - 1;
-        key = new int[hashSize];
-        Arrays.fill(key, -1);
+		this.positionLinks = new int[addresses.size()];
+		Arrays.fill(positionLinks, -1);
 
-        this.positionLinks = new int[addresses.size()];
-        Arrays.fill(positionLinks, -1);
+		// index pages
+		for (int position = 0; position < addresses.size(); position++) {
+			int pos = getHashPosition(hashPosition(position), mask);
 
-        // index pages
-        for (int position = 0; position < addresses.size(); position++) {
-            int pos = ((int) Murmur3.hash64(hashPosition(position))) & mask;
+			// look for an empty slot or a slot containing this key
+			while (key[pos] != -1) {
+				int currentKey = key[pos];
+				if (positionEqualsPosition(currentKey, position)) {
+					// found a slot for this key
+					// link the new key position to the current key position
+					positionLinks[position] = currentKey;
 
-            // look for an empty slot or a slot containing this key
-            while (key[pos] != -1) {
-                int currentKey = key[pos];
-                if (positionEqualsPosition(currentKey, position)) {
-                    // found a slot for this key
-                    // link the new key position to the current key position
-                    positionLinks[position] = currentKey;
+					// key[pos] updated outside of this loop
+					break;
+				}
+				// increment position and mask to handler wrap around
+				pos = (pos + 1) & mask;
+			}
 
-                    // key[pos] updated outside of this loop
-                    break;
-                }
-                // increment position and mask to handler wrap around
-                pos = (pos + 1) & mask;
-            }
+			key[pos] = position;
+		}
+	}
 
-            key[pos] = position;
-        }
-    }
+	@Override
+	public final int getChannelCount() {
+		return channelCount;
+	}
 
-    @Override
-    public final int getChannelCount()
-    {
-        return channelCount;
-    }
+	@Override
+	public long getInMemorySizeInBytes() {
+		return size;
+	}
 
-    @Override
-    public long getJoinPosition(int position, Block... blocks)
-    {
-        int pos = ((int) Murmur3.hash64(pagesHashStrategy.hashRow(position, blocks))) & mask;
+	@Override
+	public long getJoinPosition(int position, Page page) {
+		return getJoinPosition(position, page,
+				pagesHashStrategy.hashRow(position, page.getBlocks()));
+	}
 
-        while (key[pos] != -1) {
-            if (positionEqualsCurrentRow(key[pos], position, blocks)) {
-                return key[pos];
-            }
-            // increment position and mask to handler wrap around
-            pos = (pos + 1) & mask;
-        }
-        return -1;
-    }
+	@Override
+	public long getJoinPosition(int position, Page page, int rawHash) {
+		int pos = getHashPosition(rawHash, mask);
 
-    @Override
-    public final long getNextJoinPosition(long currentPosition)
-    {
-        return positionLinks[Ints.checkedCast(currentPosition)];
-    }
+		while (key[pos] != -1) {
+			if (positionEqualsCurrentRow(key[pos], position, page.getBlocks())) {
+				keyVisited[pos] = true;
+				return key[pos];
+			}
+			// increment position and mask to handler wrap around
+			pos = (pos + 1) & mask;
+		}
+		return -1;
+	}
 
-    @Override
-    public void appendTo(long position, PageBuilder pageBuilder, int outputChannelOffset)
-    {
-        long pageAddress = addresses.getLong(Ints.checkedCast(position));
-        int blockIndex = decodeSliceIndex(pageAddress);
-        int blockPosition = decodePosition(pageAddress);
+	@Override
+	public final long getNextJoinPosition(long currentPosition) {
+		return positionLinks[Ints.checkedCast(currentPosition)];
+	}
 
-        pagesHashStrategy.appendTo(blockIndex, blockPosition, pageBuilder, outputChannelOffset);
-    }
+	@Override
+	public LongIterator getUnvisitedJoinPositions() {
+		return new UnvisitedJoinPositionIterator();
+	}
 
-    @Override
-    public void close()
-    {
-    }
+	public class UnvisitedJoinPositionIterator extends AbstractLongIterator {
+		private int nextKeyId = 0;
+		private long nextJoinPosition = -1;
 
-    private int hashPosition(int position)
-    {
-        long pageAddress = addresses.getLong(position);
-        int blockIndex = decodeSliceIndex(pageAddress);
-        int blockPosition = decodePosition(pageAddress);
+		private UnvisitedJoinPositionIterator() {
+			findUnvisitedKeyId();
+		}
 
-        return pagesHashStrategy.hashPosition(blockIndex, blockPosition);
-    }
+		@Override
+		public long nextLong() {
+			long result = nextJoinPosition;
 
-    private boolean positionEqualsCurrentRow(int leftPosition, int rightPosition, Block... rightBlocks)
-    {
-        long pageAddress = addresses.getLong(leftPosition);
-        int blockIndex = decodeSliceIndex(pageAddress);
-        int blockPosition = decodePosition(pageAddress);
+			nextJoinPosition = getNextJoinPosition(nextJoinPosition);
+			if (nextJoinPosition < 0) {
+				nextKeyId++;
+				findUnvisitedKeyId();
+			}
 
-        return pagesHashStrategy.positionEqualsRow(blockIndex, blockPosition, rightPosition, rightBlocks);
-    }
+			return result;
+		}
 
-    private boolean positionEqualsPosition(int leftPosition, int rightPosition)
-    {
-        long leftPageAddress = addresses.getLong(leftPosition);
-        int leftBlockIndex = decodeSliceIndex(leftPageAddress);
-        int leftBlockPosition = decodePosition(leftPageAddress);
+		@Override
+		public boolean hasNext() {
+			return nextKeyId < keyVisited.length;
+		}
 
-        long rightPageAddress = addresses.getLong(rightPosition);
-        int rightBlockIndex = decodeSliceIndex(rightPageAddress);
-        int rightBlockPosition = decodePosition(rightPageAddress);
+		private void findUnvisitedKeyId() {
+			while (nextKeyId < keyVisited.length) {
+				if (key[nextKeyId] != -1 && !keyVisited[nextKeyId]) {
+					break;
+				}
+				nextKeyId++;
+			}
+			if (nextKeyId < keyVisited.length) {
+				nextJoinPosition = key[nextKeyId];
+			}
+		}
+	}
 
-        return pagesHashStrategy.positionEqualsPosition(leftBlockIndex, leftBlockPosition, rightBlockIndex, rightBlockPosition);
-    }
+	@Override
+	public void appendTo(long position, PageBuilder pageBuilder,
+			int outputChannelOffset) {
+		long pageAddress = addresses.getLong(Ints.checkedCast(position));
+		int blockIndex = decodeSliceIndex(pageAddress);
+		int blockPosition = decodePosition(pageAddress);
 
-    public boolean applyFilter(ConnectorSession connectorSession,FilterJoinCondition filterJoinCondition, List<Block> blocks, int position, long joinPosition)
-    {
-        long pageAddress = addresses.getLong(Ints.checkedCast(joinPosition));
-        int blockIndex = decodeSliceIndex(pageAddress);
-        int blockPosition = decodePosition(pageAddress);
+		pagesHashStrategy.appendTo(blockIndex, blockPosition, pageBuilder,
+				outputChannelOffset);
+	}
 
-        return ((CustomizedSimplePagesHashStrategy) pagesHashStrategy).applyFilter(connectorSession,blockIndex, blockPosition,
-                filterJoinCondition, blocks, position);
-    }
+	@Override
+	public void close() {
+	}
+
+	private int hashPosition(int position) {
+		long pageAddress = addresses.getLong(position);
+		int blockIndex = decodeSliceIndex(pageAddress);
+		int blockPosition = decodePosition(pageAddress);
+
+		return pagesHashStrategy.hashPosition(blockIndex, blockPosition);
+	}
+
+	private boolean positionEqualsCurrentRow(int leftPosition,
+			int rightPosition, Block... rightBlocks) {
+		long pageAddress = addresses.getLong(leftPosition);
+		int blockIndex = decodeSliceIndex(pageAddress);
+		int blockPosition = decodePosition(pageAddress);
+
+		return pagesHashStrategy.positionEqualsRow(blockIndex, blockPosition,
+				rightPosition, rightBlocks);
+	}
+
+	private boolean positionEqualsPosition(int leftPosition, int rightPosition) {
+		long leftPageAddress = addresses.getLong(leftPosition);
+		int leftBlockIndex = decodeSliceIndex(leftPageAddress);
+		int leftBlockPosition = decodePosition(leftPageAddress);
+
+		long rightPageAddress = addresses.getLong(rightPosition);
+		int rightBlockIndex = decodeSliceIndex(rightPageAddress);
+		int rightBlockPosition = decodePosition(rightPageAddress);
+
+		return pagesHashStrategy.positionEqualsPosition(leftBlockIndex,
+				leftBlockPosition, rightBlockIndex, rightBlockPosition);
+	}
+
+	private static int getHashPosition(int rawHash, int mask) {
+		return ((int) XxHash64.hash(rawHash)) & mask;
+	}
+
+	public boolean applyFilter(ConnectorSession connectorSession,
+			FilterJoinCondition filterJoinCondition, List<Block> blocks,
+			int position, long joinPosition) {
+		long pageAddress = addresses.getLong(Ints.checkedCast(joinPosition));
+		int blockIndex = decodeSliceIndex(pageAddress);
+		int blockPosition = decodePosition(pageAddress);
+
+		return ((CustomizedSimplePagesHashStrategy) pagesHashStrategy)
+				.applyFilter(connectorSession, blockIndex, blockPosition,
+						filterJoinCondition, blocks, position);
+	}
 }

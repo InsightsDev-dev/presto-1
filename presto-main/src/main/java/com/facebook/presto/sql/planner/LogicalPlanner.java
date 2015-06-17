@@ -92,9 +92,11 @@ public class LogicalPlanner
 		if (optimizer instanceof CustomizedPredicatePushDown) 
 		{
 			CustomizedPredicatePushDown customizedPredicatePushDownOptimizor = (CustomizedPredicatePushDown) optimizer;
-			root = customizedPredicatePushDownOptimizor.optimize(root,
-					session, symbolAllocator.getTypes(), symbolAllocator,
-					idAllocator, customizedPredicatePushDownContext);
+//			root = customizedPredicatePushDownOptimizor.optimize(root,
+//					session, symbolAllocator.getTypes(), symbolAllocator,
+//					idAllocator, customizedPredicatePushDownContext);
+			//@Todo dilip : fix this
+			throw new RuntimeException("Fix this");
 		} else 
 		{
 			root = optimizer.optimize(root, session,

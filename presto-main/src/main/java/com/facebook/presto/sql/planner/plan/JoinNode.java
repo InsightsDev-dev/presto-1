@@ -22,6 +22,7 @@ import com.facebook.presto.sql.tree.Join;
 import com.facebook.presto.sql.tree.QualifiedNameReference;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
 
 import javax.annotation.Nullable;
@@ -45,14 +46,14 @@ public class JoinNode
     private final Optional<Symbol> rightHashSymbol;
     private Expression comparisons;
 
-    @JsonCreator
-    public JoinNode(@JsonProperty("id") PlanNodeId id,
-            @JsonProperty("type") Type type,
-            @JsonProperty("left") PlanNode left,
-            @JsonProperty("right") PlanNode right,
-            @JsonProperty("criteria") List<EquiJoinClause> criteria,
-            @JsonProperty("leftHashSymbol") Optional<Symbol> leftHashSymbol,
-            @JsonProperty("rightHashSymbol") Optional<Symbol> rightHashSymbol)
+    
+    public JoinNode( PlanNodeId id,
+             Type type,
+             PlanNode left,
+             PlanNode right,
+             List<EquiJoinClause> criteria,
+             Optional<Symbol> leftHashSymbol,
+             Optional<Symbol> rightHashSymbol)
     {
         super(id);
         checkNotNull(type, "type is null");
@@ -77,7 +78,7 @@ public class JoinNode
             @JsonProperty("left") PlanNode left,
             @JsonProperty("right") PlanNode right,
             @JsonProperty("criteria") List<EquiJoinClause> criteria,
-              @JsonProperty("leftHashSymbol") Optional<Symbol> leftHashSymbol,
+            @JsonProperty("leftHashSymbol") Optional<Symbol> leftHashSymbol,
             @JsonProperty("rightHashSymbol") Optional<Symbol> rightHashSymbol,
             @JsonProperty("comparisons") @Nullable Expression comparisons)
     {

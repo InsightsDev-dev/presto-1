@@ -29,7 +29,6 @@ import com.facebook.presto.sql.planner.plan.ProjectNode;
 import com.facebook.presto.sql.planner.plan.RowNumberNode;
 import com.facebook.presto.sql.planner.plan.SampleNode;
 import com.facebook.presto.sql.planner.plan.SemiJoinNode;
-import com.facebook.presto.sql.planner.plan.SinkNode;
 import com.facebook.presto.sql.planner.plan.SortNode;
 import com.facebook.presto.sql.planner.plan.TableCommitNode;
 import com.facebook.presto.sql.planner.plan.TableScanNode;
@@ -50,7 +49,7 @@ import com.google.common.collect.ImmutableSet;
 
 /**
  * 
- * @author dilipsingh
+ * @author Dilip Kasana
  * @Date 29-Apr-2015
  */
 public final class AggregateFunctionSymbolMappingResolver {
@@ -454,17 +453,18 @@ public final class AggregateFunctionSymbolMappingResolver {
 						clause.getIndex(), node.getIndexSource()
 								.getOutputSymbols());
 			}
-
-			Set<Symbol> lookupSymbols = FluentIterable.from(node.getCriteria())
-					.transform(IndexJoinNode.EquiJoinClause.indexGetter())
-					.toSet();
-			Map<Symbol, Symbol> trace = IndexKeyTracer.trace(
-					node.getIndexSource(), lookupSymbols);
-			checkArgument(
-					!trace.isEmpty()
-							&& lookupSymbols.containsAll(trace.keySet()),
-					"Index lookup symbols are not traceable to index source: %s",
-					lookupSymbols);
+//@Todo : dilip 
+//Uncomment and resolve this
+//			Set<Symbol> lookupSymbols = FluentIterable.from(node.getCriteria())
+//					.transform(IndexJoinNode.EquiJoinClause)
+//					.toSet();
+//			Map<Symbol, Symbol> trace = IndexKeyTracer.trace(
+//					node.getIndexSource(), lookupSymbols);
+//			checkArgument(
+//					!trace.isEmpty()
+//							&& lookupSymbols.containsAll(trace.keySet()),
+//					"Index lookup symbols are not traceable to index source: %s",
+//					lookupSymbols);
 
 			return null;
 		}
@@ -527,16 +527,7 @@ public final class AggregateFunctionSymbolMappingResolver {
 			return null;
 		}
 
-		@Override
-		public Void visitSink(SinkNode node, Void context) {
-			PlanNode source = node.getSource();
-			source.accept(this, context); // visit child
-
-			verifyUniqueId(node);
-
-			return null;
-		}
-
+		
 		@Override
 		public Void visitTableWriter(TableWriterNode node, Void context) {
 			PlanNode source = node.getSource();

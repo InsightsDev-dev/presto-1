@@ -95,7 +95,7 @@ public class CanonicalizeExpressions
             if (node.getOriginalConstraint() != null) {
                 originalConstraint = canonicalizeExpression(node.getOriginalConstraint());
             }
-            return new TableScanNode(
+            TableScanNode tableScanNode= new TableScanNode(
                     node.getId(),
                     node.getTable(),
                     node.getOutputSymbols(),
@@ -103,6 +103,8 @@ public class CanonicalizeExpressions
                     node.getLayout(),
                     node.getCurrentConstraint(),
                     originalConstraint);
+            tableScanNode.setProteumTupleDomain(node.getProteumTupleDomain());
+            return tableScanNode;
         }
     }
 

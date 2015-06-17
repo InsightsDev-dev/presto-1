@@ -16,7 +16,6 @@ package com.facebook.presto.sql.planner;
 import com.facebook.presto.Session;
 import com.facebook.presto.block.BlockUtils;
 import com.facebook.presto.byteCode.ClassDefinition;
-import com.facebook.presto.byteCode.CompilerContext;
 import com.facebook.presto.execution.TaskManagerConfig;
 import com.facebook.presto.index.IndexManager;
 import com.facebook.presto.metadata.FunctionInfo;
@@ -25,7 +24,6 @@ import com.facebook.presto.metadata.Signature;
 import com.facebook.presto.operator.AggregationOperator.AggregationOperatorFactory;
 import com.facebook.presto.operator.CursorProcessor;
 import com.facebook.presto.operator.CustomizedHashBuilderOperator;
-import com.facebook.presto.operator.CustomizedHashBuilderOperator.CustomizedHashBuilderOperatorFactory;
 import com.facebook.presto.operator.CustomizedLookupJoinOperatorFactory;
 import com.facebook.presto.operator.DriverFactory;
 import com.facebook.presto.operator.ExchangeClient;
@@ -41,13 +39,12 @@ import com.facebook.presto.operator.HashPartitionMaskOperator.HashPartitionMaskO
 import com.facebook.presto.operator.HashSemiJoinOperator.HashSemiJoinOperatorFactory;
 import com.facebook.presto.operator.InMemoryExchange;
 import com.facebook.presto.operator.LimitOperator.LimitOperatorFactory;
-import com.facebook.presto.operator.LookupJoinOperatorFactory;
+import com.facebook.presto.operator.LookupJoinOperators.JoinType;
 import com.facebook.presto.operator.LookupJoinOperators;
 import com.facebook.presto.operator.LookupSourceSupplier;
 import com.facebook.presto.operator.MarkDistinctOperator.MarkDistinctOperatorFactory;
 import com.facebook.presto.operator.OperatorFactory;
 import com.facebook.presto.operator.OrderByOperator.OrderByOperatorFactory;
-import com.facebook.presto.operator.JoinProbeFactory;
 import com.facebook.presto.operator.OutputFactory;
 import com.facebook.presto.operator.PageProcessor;
 import com.facebook.presto.operator.ParallelHashBuilder;
@@ -85,7 +82,6 @@ import com.facebook.presto.split.MappedRecordSet;
 import com.facebook.presto.split.PageSinkManager;
 import com.facebook.presto.split.PageSourceProvider;
 import com.facebook.presto.sql.ExpressionUtils;
-import com.facebook.presto.sql.analyzer.SemanticException;
 import com.facebook.presto.sql.gen.CallSiteBinder;
 import com.facebook.presto.sql.gen.CompilerUtils;
 import com.facebook.presto.sql.gen.CustomizedPageProcessorCompiler;
@@ -170,6 +166,10 @@ import static com.facebook.presto.SystemSessionProperties.getTaskAggregationConc
 import static com.facebook.presto.SystemSessionProperties.getTaskHashBuildConcurrency;
 import static com.facebook.presto.SystemSessionProperties.getTaskJoinConcurrency;
 import static com.facebook.presto.SystemSessionProperties.getTaskWriterCount;
+import static com.facebook.presto.byteCode.Access.FINAL;
+import static com.facebook.presto.byteCode.Access.PUBLIC;
+import static com.facebook.presto.byteCode.Access.a;
+import static com.facebook.presto.byteCode.ParameterizedType.type;
 import static com.facebook.presto.operator.DistinctLimitOperator.DistinctLimitOperatorFactory;
 import static com.facebook.presto.operator.InMemoryExchangeSourceOperator.InMemoryExchangeSourceOperatorFactory.createBroadcastDistribution;
 import static com.facebook.presto.operator.InMemoryExchangeSourceOperator.InMemoryExchangeSourceOperatorFactory.createRandomDistribution;
@@ -181,6 +181,7 @@ import static com.facebook.presto.spi.StandardErrorCode.COMPILER_ERROR;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.sql.analyzer.ExpressionAnalyzer.getExpressionTypes;
 import static com.facebook.presto.sql.analyzer.ExpressionAnalyzer.getExpressionTypesFromInput;
+import static com.facebook.presto.sql.gen.CompilerUtils.makeClassName;
 import static com.facebook.presto.sql.planner.plan.JoinNode.Type.FULL;
 import static com.facebook.presto.sql.planner.plan.JoinNode.Type.RIGHT;
 import static com.facebook.presto.sql.planner.plan.TableWriterNode.CreateHandle;
@@ -1284,9 +1285,9 @@ public class LocalExecutionPlanner
                 case INNER:
                 	new UnsupportedOperationException("Customization for join is not supported for Inner: " + node.getType());
                 case LEFT:
-                    return createJoinOperator(node, node.getLeft(), leftSymbols,leftComparisonsSymbols, node.getRight(), rightSymbols,rightComparisonsSymbols,types, context);
+                    return createJoinOperator(node, node.getLeft(), leftSymbols,node.getLeftHashSymbol(),leftComparisonsSymbols, node.getRight(), rightSymbols,node.getRightHashSymbol(),rightComparisonsSymbols,types, context);
                 case RIGHT:
-                    return createJoinOperator(node, node.getRight(), rightSymbols,rightComparisonsSymbols, node.getLeft(), leftSymbols,leftComparisonsSymbols,types, context);
+                    return createJoinOperator(node, node.getRight(), rightSymbols,node.getRightHashSymbol(),rightComparisonsSymbols, node.getLeft(), leftSymbols,node.getLeftHashSymbol(),leftComparisonsSymbols,types, context);
                 default:
                     throw new UnsupportedOperationException("Customization for join is not supported for join type: " + node.getType());
             }
@@ -1306,40 +1307,92 @@ public class LocalExecutionPlanner
 				JoinNode node,
 				PlanNode probeNode,
 				List<Symbol> probeSymbols,
+				Optional<Symbol> probeHashSymbol,
 				List<Symbol> probeComparisonsSymbols,
 				PlanNode buildNode,
 				List<Symbol> buildSymbols,
+				Optional<Symbol> buildHashSymbol,
 				List<Symbol> buildComparisonsSymbols,
 				List<com.facebook.presto.sql.tree.ComparisonExpression.Type> types,
 				LocalExecutionPlanContext context) {
 
-            // Plan probe and introduce a projection to put all fields from the probe side into a single channel if necessary
-            PhysicalOperation probeSource = probeNode.accept(this, context);
+        	
+        	
+        	// Plan probe and introduce a projection to put all fields from the probe side into a single channel if necessary
+            PhysicalOperation probeSource;
+            LocalExecutionPlanContext parallelParentContext = null;
+            int joinConcurrency = getTaskJoinConcurrency(session, defaultConcurrency);
+            // currently we can not run joins with an outer build in parallel
+            if (!isBuildOuter(node) && context.isAllowLocalParallel() && context.getDriverInstanceCount() == 1 && joinConcurrency > 1) {
+                parallelParentContext = context;
+                context = context.createSubContext();
+                probeSource = createInMemoryExchange(probeNode, context);
+                context.setDriverInstanceCount(joinConcurrency);
+            }
+            else {
+                probeSource = probeNode.accept(this, context);
+            }
             List<Integer> probeChannels = ImmutableList.copyOf(getChannelsForSymbols(probeSymbols, probeSource.getLayout()));
-            List<Integer> probeComparisonsChannels = ImmutableList.copyOf(getChannelsForSymbols(probeComparisonsSymbols, probeSource.getLayout()));
+            Optional<Integer> probeHashChannel = probeHashSymbol.map(channelGetter(probeSource));
 
             // do the same on the build side
             LocalExecutionPlanContext buildContext = context.createSubContext();
             PhysicalOperation buildSource = buildNode.accept(this, buildContext);
             List<Integer> buildChannels = ImmutableList.copyOf(getChannelsForSymbols(buildSymbols, buildSource.getLayout()));
+            Optional<Integer> buildHashChannel = buildHashSymbol.map(channelGetter(buildSource));
             List<Integer> buildComparisonsChannels = ImmutableList.copyOf(getChannelsForSymbols(buildComparisonsSymbols, buildSource.getLayout()));
+            List<Integer> probeComparisonsChannels = ImmutableList.copyOf(getChannelsForSymbols(probeComparisonsSymbols, probeSource.getLayout()));
 
-            CustomizedHashBuilderOperator.
-    		CustomizedHashBuilderOperatorFactory hashBuilderOperatorFactory = new CustomizedHashBuilderOperator.
-            		CustomizedHashBuilderOperatorFactory(
-                    buildContext.getNextOperatorId(),
-                    buildSource.getTypes(),
-                    buildChannels,
-                    100_000);
-            LookupSourceSupplier lookupSourceSupplier = hashBuilderOperatorFactory.getLookupSourceSupplier();
-            DriverFactory buildDriverFactory = new DriverFactory(
-                    buildContext.isInputDriver(),
-                    false,
-                    ImmutableList.<OperatorFactory>builder()
-                            .addAll(buildSource.getOperatorFactories())
-                            .add(hashBuilderOperatorFactory)
-                            .build());
-            context.addDriverFactory(buildDriverFactory);
+            LookupSourceSupplier lookupSourceSupplier;
+            int hashBuildConcurrency = getTaskHashBuildConcurrency(session, defaultConcurrency);
+            if (isBuildOuter(node) || hashBuildConcurrency <= 1) {
+                CustomizedHashBuilderOperator.
+        		CustomizedHashBuilderOperatorFactory hashBuilderOperatorFactory = new CustomizedHashBuilderOperator.
+                		CustomizedHashBuilderOperatorFactory(
+                        buildContext.getNextOperatorId(),
+                        buildSource.getTypes(),
+                        buildChannels,
+                        buildHashChannel,
+                        100_000);
+                 lookupSourceSupplier = hashBuilderOperatorFactory.getLookupSourceSupplier();
+
+                context.addDriverFactory(new DriverFactory(
+                        buildContext.isInputDriver(),
+                        false,
+                        ImmutableList.<OperatorFactory>builder()
+                                .addAll(buildSource.getOperatorFactories())
+                                .add(hashBuilderOperatorFactory)
+                                .build()));
+
+            }
+            else {
+            	//Todo ::dilip Change for join node here
+                // round partitionCount down to the last power of 2
+                int parallelBuildCount = Integer.highestOneBit(hashBuildConcurrency);
+
+                ParallelHashBuilder parallelHashBuilder = new ParallelHashBuilder(
+                        buildSource.getTypes(),
+                        buildChannels,
+                        buildHashChannel,
+                        10_000,
+                        parallelBuildCount);
+
+                context.addDriverFactory(new DriverFactory(
+                        buildContext.isInputDriver(),
+                        false,
+                        ImmutableList.<OperatorFactory>builder()
+                                .addAll(buildSource.getOperatorFactories())
+                                .add(parallelHashBuilder.getCollectOperatorFactory(buildContext.getNextOperatorId()))
+                                .build()));
+
+                context.addDriverFactory(new DriverFactory(
+                        false,
+                        false,
+                        ImmutableList.of(parallelHashBuilder.getBuildOperatorFactory()),
+                        parallelBuildCount));
+
+                lookupSourceSupplier = parallelHashBuilder.getLookupSourceSupplier();
+            }
 
             ImmutableMap.Builder<Symbol, Integer> outputMappings = ImmutableMap.builder();
             outputMappings.putAll(probeSource.getLayout());
@@ -1352,10 +1405,20 @@ public class LocalExecutionPlanner
                 outputMappings.put(entry.getKey(), offset + input);
             }
 
+          //  OperatorFactory operator = createJoinOperator(node.getType(), lookupSourceSupplier, probeSource.getTypes(), probeChannels, probeHashChannel, context);
+            
             OperatorFactory operator = createCustomizedJoinOperator(node.getType(), lookupSourceSupplier,
-            		probeSource.getTypes(), probeChannels, context,buildComparisonsChannels,probeComparisonsChannels,types);
-            return new PhysicalOperation(operator, outputMappings.build(), probeSource);
-		}
+            		probeSource.getTypes(), probeChannels,probeHashChannel, context,buildComparisonsChannels,probeComparisonsChannels,types);
+            //return new PhysicalOperation(operator, outputMappings.build(), probeSource);
+            PhysicalOperation operation = new PhysicalOperation(operator, outputMappings.build(), probeSource);
+
+            // merge parallel joiners back into a single stream
+            if (parallelParentContext != null) {
+                operation = addInMemoryExchange(parallelParentContext, operation, context);
+            }
+
+            return operation;
+        }
 
         
         private OperatorFactory createCustomizedJoinOperator(
@@ -1363,25 +1426,42 @@ public class LocalExecutionPlanner
                 LookupSourceSupplier lookupSourceSupplier,
                 List<Type> probeTypes,
                 List<Integer> probeJoinChannels,
-                LocalExecutionPlanContext context, 
+                Optional<Integer> probeHashChannel, LocalExecutionPlanContext context, 
                 List<Integer> buildComparisonsChannels, 
                 List<Integer> probeComparisonsChannels,
                 List<com.facebook.presto.sql.tree.ComparisonExpression.Type> types)
         {
         	SimpleJoinProbe.SimpleJoinProbeFactory joinProbeFactory =new SimpleJoinProbe.SimpleJoinProbeFactory
-        			(probeTypes, probeJoinChannels);
+        			(probeTypes, probeJoinChannels,probeHashChannel);
+        	JoinType joinType=null;
+        	switch (type) {
+            case INNER:
+            	joinType=JoinType.INNER;
+            	break;
+            case LEFT:
+            	joinType=JoinType.PROBE_OUTER;
+            	break;
+            case RIGHT:
+            	joinType=JoinType.LOOKUP_OUTER;
+            	break;
+            case FULL:
+            	joinType=JoinType.FULL_OUTER;
+            	break;
+			default:
+				throw new RuntimeException("Unsupported Type:"+type);
+        	}
         	FilterJoinCondition filterJoinCondition;
             switch (type) {
                 case LEFT:
                 	filterJoinCondition= generate( 
         					lookupSourceSupplier, probeTypes,  buildComparisonsChannels,probeComparisonsChannels,types,true);
                 	return new CustomizedLookupJoinOperatorFactory(context.getNextOperatorId(), 
-        					lookupSourceSupplier, probeTypes, true, joinProbeFactory,filterJoinCondition);
+        					lookupSourceSupplier, probeTypes,joinType,  joinProbeFactory,true,filterJoinCondition);
                 case RIGHT:
                 	filterJoinCondition= generate( 
         					lookupSourceSupplier, probeTypes, buildComparisonsChannels,probeComparisonsChannels,types,false);
                 	return new CustomizedLookupJoinOperatorFactory(context.getNextOperatorId(), 
-        					lookupSourceSupplier, probeTypes, true, joinProbeFactory,filterJoinCondition);
+        					lookupSourceSupplier, probeTypes, joinType, joinProbeFactory,true,filterJoinCondition);
                 default:
                     throw new UnsupportedOperationException("Unsupported customized join type: " + type);
             }
@@ -1423,15 +1503,17 @@ public class LocalExecutionPlanner
             Expression filter=ExpressionUtils.and(list);
             IdentityHashMap<Expression, Type> expressionTypes = getExpressionTypesFromInput
             		(session, metadata, sqlParser, inputTypes, ImmutableList.of(filter));
-            RowExpression rowExpression=SqlToRowExpressionTranslator.translate(filter, expressionTypes, metadata, session, false);
+            
+            
+            RowExpression rowExpression=SqlToRowExpressionTranslator.translate(filter, expressionTypes, metadata.getFunctionRegistry(),
+            		metadata.getTypeManager(),session, false);
            CustomizedPageProcessorCompiler pageProcessorCompiler= new CustomizedPageProcessorCompiler(metadata);
            Class<FilterJoinCondition> superType = FilterJoinCondition.class;
-
-    		CompilerContext compilerContext=new CompilerContext(BOOTSTRAP_METHOD);
     		ClassDefinition classDefinition = new ClassDefinition(
-    				compilerContext, a(PUBLIC, FINAL),
+    				 a(PUBLIC, FINAL),
     				makeClassName(superType.getSimpleName()), type(Object.class),
     				type(superType));
+
     		CallSiteBinder callSiteBinder = new CallSiteBinder();
     		pageProcessorCompiler.generateMethods(classDefinition, callSiteBinder,
     				rowExpression, offset);

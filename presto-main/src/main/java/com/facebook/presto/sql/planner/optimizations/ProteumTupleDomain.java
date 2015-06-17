@@ -12,7 +12,7 @@ import com.facebook.presto.sql.tree.Expression;
 
 /**
  * 
- * @author dilipsingh
+ * @author Dilip Kasana
  * @Date 18-Feb-2015
  */
 public class ProteumTupleDomain<T> extends TupleDomain<T> {
@@ -27,6 +27,19 @@ public class ProteumTupleDomain<T> extends TupleDomain<T> {
 			Expression extractionRemainingExpression) {
 		super(domains);
 		this.remainingExpresstion = extractionRemainingExpression;
+	}
+	
+	protected ProteumTupleDomain(Map<T, Domain> domains,
+			Expression extractionRemainingExpression,TupleDomain<T> tupleDomain) {
+		super(domains);
+		this.remainingExpresstion = extractionRemainingExpression;
+		if(tupleDomain instanceof ProteumTupleDomain){
+			ProteumTupleDomain<T> proteumTupleDomain=(ProteumTupleDomain<T>) tupleDomain;
+		this.groupBy=proteumTupleDomain.groupBy;
+		this.isAggregatePushDownable=proteumTupleDomain.isAggregatePushDownable;
+		this.minimumExpression=proteumTupleDomain.minimumExpression;
+		this.pushDownAggregationList=proteumTupleDomain.pushDownAggregationList;
+		}
 	}
 
 	protected ProteumTupleDomain(Map<T, Domain> domains,

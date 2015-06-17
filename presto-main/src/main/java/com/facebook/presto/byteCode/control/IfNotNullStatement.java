@@ -15,188 +15,101 @@ package com.facebook.presto.byteCode.control;
 
 import com.facebook.presto.byteCode.Block;
 import com.facebook.presto.byteCode.ByteCodeNode;
-import com.facebook.presto.byteCode.ByteCodeNodeFactory;
 import com.facebook.presto.byteCode.ByteCodeVisitor;
-import com.facebook.presto.byteCode.CompilerContext;
+import com.facebook.presto.byteCode.MethodGenerationContext;
 import com.facebook.presto.byteCode.instruction.LabelNode;
 import com.google.common.collect.ImmutableList;
 import org.objectweb.asm.MethodVisitor;
 
 import java.util.List;
 
-import static com.facebook.presto.byteCode.ByteCodeNodes.buildBlock;
-import static com.facebook.presto.byteCode.ExpectedType.BOOLEAN;
-import static com.facebook.presto.byteCode.ExpectedType.VOID;
+import static com.google.common.base.Preconditions.checkState;
+
 /**
  * 
  * @author dilip kasana
  * @Date 01 june 2015
  */
-public class IfNotNullStatement
-        implements FlowControl
-{
-    public static IfStatementBuilder ifStatementBuilder(CompilerContext context)
-    {
-        return new IfStatementBuilder(context);
-    }
+public class IfNotNullStatement implements FlowControl {
+	private final String comment;
+	private final Block condition;
+	private final Block ifNotNull;
+	private final Block ifNull;
 
-    public static class IfStatementBuilder
-    {
-        private final CompilerContext context;
+	private final LabelNode ifNotNullLabel = new LabelNode("false");
+	private final LabelNode outLabel = new LabelNode("out");
 
-        private String comment;
-        private ByteCodeNode condition;
-        private ByteCodeNode ifTrue;
-        private ByteCodeNode ifFalse;
+	public IfNotNullStatement(Block condition, Block ifTrue, Block ifFalse) {
+		this(null, condition, ifTrue, ifFalse);
+	}
 
-        public IfStatementBuilder(CompilerContext context)
-        {
-            this.context = context;
-        }
+	public IfNotNullStatement(String comment, Block condition, Block ifTrue,
+			Block ifFalse) {
+		this.comment = comment;
+		this.condition = condition;
+		this.ifNotNull = ifTrue;
+		this.ifNull = ifFalse;
+	}
 
-        public IfStatementBuilder comment(String format, Object... args)
-        {
-            this.comment = String.format(format, args);
-            return this;
-        }
+	@Override
+	public String getComment() {
+		return comment;
+	}
 
-        public IfStatementBuilder condition(ByteCodeNode condition)
-        {
-            this.condition = buildBlock(context, condition, "condition");
-            return this;
-        }
+	public ByteCodeNode getCondition() {
+		return condition;
+	}
 
-        public IfStatementBuilder condition(ByteCodeNodeFactory condition)
-        {
-            this.condition = buildBlock(context, condition, BOOLEAN, "condition");
-            return this;
-        }
+	public ByteCodeNode getIfTrue() {
+		return ifNotNull;
+	}
 
-        public IfStatementBuilder ifTrue(ByteCodeNode ifTrue)
-        {
-            this.ifTrue = buildBlock(context, ifTrue, "ifTrue");
-            return this;
-        }
+	public ByteCodeNode getIfFalse() {
+		return ifNull;
+	}
 
-        public IfStatementBuilder ifTrue(ByteCodeNodeFactory ifTrue)
-        {
-            this.ifTrue = buildBlock(context, ifTrue, VOID, "ifTrue");
-            return this;
-        }
+	@Override
+	public void accept(MethodVisitor visitor,
+			MethodGenerationContext generationContext) {
 
-        public IfStatementBuilder ifFalse(ByteCodeNode ifFalse)
-        {
-            this.ifFalse = buildBlock(context, ifFalse, "ifFalse");
-            return this;
-        }
+		checkState(!condition.isEmpty(),
+				"IfStatement does not have a condition set");
+		checkState(!ifNull.isEmpty() || !ifNotNull.isEmpty(),
+				"IfStatement does not have a true or false block set");
+		/*
+		 * block.dup(methodType.returnType()) .ifNotNullGoto(notNull)
+		 * .putVariable("wasNull", true)
+		 * .comment("swap boxed null with unboxed default")
+		 * .pop(methodType.returnType()) .pushJavaDefault(unboxedReturnType)
+		 * .gotoLabel(end) .visitLabel(notNull) .append(unboxPrimitive(context,
+		 * unboxedReturnType));
+		 */
+		Block block = new Block();
 
-        public IfStatementBuilder ifFalse(ByteCodeNodeFactory ifFalse)
-        {
-            this.ifFalse = buildBlock(context, ifFalse, VOID, "ifFalse");
-            return this;
-        }
+		block.append(condition).ifNotNullGoto(ifNotNullLabel).append(ifNull);
 
-        public IfNotNullStatement build()
-        {
-            IfNotNullStatement ifStatement = new IfNotNullStatement(context, comment, condition, ifTrue, ifFalse);
-            return ifStatement;
-        }
-    }
+		// IfNotNull
+		if (ifNotNull != null) {
+			block.gotoLabel(outLabel).visitLabel(ifNotNullLabel)
+					.append(ifNotNull).visitLabel(outLabel);
+		} else {
+			block.visitLabel(ifNotNullLabel);
+		}
 
-    private final CompilerContext context;
-    private final String comment;
-    private final ByteCodeNode condition;
-    private final ByteCodeNode ifNotNull;
-    private final ByteCodeNode ifNull;
+		block.accept(visitor, generationContext);
+	}
 
-    private final LabelNode ifNotNullLabel = new LabelNode("false");
-    private final LabelNode outLabel = new LabelNode("out");
+	@Override
+	public List<ByteCodeNode> getChildNodes() {
+		if (ifNull == null) {
+			return ImmutableList.of(condition, ifNotNull);
+		} else {
+			return ImmutableList.of(condition, ifNotNull, ifNull);
+		}
+	}
 
-    public IfNotNullStatement(CompilerContext context, ByteCodeNode condition, ByteCodeNode ifTrue, ByteCodeNode ifFalse)
-    {
-        this(context, null, condition, ifTrue, ifFalse);
-    }
-
-    public IfNotNullStatement(CompilerContext context, String comment, ByteCodeNode condition, ByteCodeNode ifTrue, ByteCodeNode ifFalse)
-    {
-        this.context = context;
-        this.comment = comment;
-        this.condition = condition;
-        this.ifNotNull = ifTrue;
-        this.ifNull = ifFalse;
-    }
-
-    @Override
-    public String getComment()
-    {
-        return comment;
-    }
-
-    public ByteCodeNode getCondition()
-    {
-        return condition;
-    }
-
-    public ByteCodeNode getIfTrue()
-    {
-        return ifNotNull;
-    }
-
-    public ByteCodeNode getIfFalse()
-    {
-        return ifNull;
-    }
-
-    @Override
-    public void accept(MethodVisitor visitor)
-    {
-
-
-    	/*
-    	block.dup(methodType.returnType())
-                        .ifNotNullGoto(notNull)
-                        .putVariable("wasNull", true)
-                        .comment("swap boxed null with unboxed default")
-                        .pop(methodType.returnType())
-                        .pushJavaDefault(unboxedReturnType)
-                        .gotoLabel(end)
-                        .visitLabel(notNull)
-                        .append(unboxPrimitive(context, unboxedReturnType));
-    	*/
-        Block block = new Block(context);
-
-        block.append(condition)
-        	.ifNotNullGoto(ifNotNullLabel)
-        	.append(ifNull);
-
-        //IfNotNull
-        if (ifNotNull != null) {
-            block.gotoLabel(outLabel)
-                    .visitLabel(ifNotNullLabel)
-                    .append(ifNotNull)
-                    .visitLabel(outLabel);
-        }
-        else {
-            block.visitLabel(ifNotNullLabel);
-        }
-
-        block.accept(visitor);
-    }
-
-    @Override
-    public List<ByteCodeNode> getChildNodes()
-    {
-        if (ifNull == null) {
-            return ImmutableList.of(condition, ifNotNull);
-        }
-        else {
-            return ImmutableList.of(condition, ifNotNull, ifNull);
-        }
-    }
-
-    @Override
-    public <T> T accept(ByteCodeNode parent, ByteCodeVisitor<T> visitor)
-    {
-        return visitor.visitIfNotNull(parent, this);
-    }
+	@Override
+	public <T> T accept(ByteCodeNode parent, ByteCodeVisitor<T> visitor) {
+		return visitor.visitIfNotNull(parent, this);
+	}
 }

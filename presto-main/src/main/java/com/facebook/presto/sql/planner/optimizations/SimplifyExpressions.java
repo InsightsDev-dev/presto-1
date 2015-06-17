@@ -105,7 +105,7 @@ public class SimplifyExpressions
             if (node.getOriginalConstraint() != null) {
                 originalConstraint = simplifyExpression(node.getOriginalConstraint());
             }
-            return new TableScanNode(
+            TableScanNode tableScanNode= new TableScanNode(
                     node.getId(),
                     node.getTable(),
                     node.getOutputSymbols(),
@@ -113,6 +113,8 @@ public class SimplifyExpressions
                     node.getLayout(),
                     node.getCurrentConstraint(),
                     originalConstraint);
+            tableScanNode.setProteumTupleDomain(node.getProteumTupleDomain());
+            return tableScanNode;
         }
 
         private Expression simplifyExpression(Expression input)

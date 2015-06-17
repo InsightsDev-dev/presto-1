@@ -14,6 +14,7 @@
 package com.facebook.presto.operator;
 
 import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.operator.LookupJoinOperators.JoinType;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.sql.gen.FilterJoinCondition;
 import com.google.common.collect.ImmutableList;
@@ -21,61 +22,58 @@ import com.google.common.collect.ImmutableList;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.checkState;
+
 /**
  * 
  * @author dilip kasana
- * @Date  13-Feb-2015
+ * @Date 13-Feb-2015
  */
-public class CustomizedLookupJoinOperatorFactory
-        implements OperatorFactory
-{
-    private final int operatorId;
-    private final LookupSourceSupplier lookupSourceSupplier;
-    private final List<Type> probeTypes;
-    private final boolean enableOuterJoin;
-    private final List<Type> types;
-    private final JoinProbeFactory joinProbeFactory;
-    private boolean closed;
-    private final FilterJoinCondition filterJoinCondition;
+public class CustomizedLookupJoinOperatorFactory implements OperatorFactory {
+	private final int operatorId;
+	private final LookupSourceSupplier lookupSourceSupplier;
+	private final List<Type> probeTypes;
+	private final boolean enableOuterJoin;
+	private final JoinType joinType;
+	private final List<Type> types;
+	private final JoinProbeFactory joinProbeFactory;
+	private boolean closed;
+	private final FilterJoinCondition filterJoinCondition;
+
 	public CustomizedLookupJoinOperatorFactory(int operatorId,
-            LookupSourceSupplier lookupSourceSupplier,
-            List<Type> probeTypes,
-            boolean enableOuterJoin,
-            JoinProbeFactory joinProbeFactory,
-            FilterJoinCondition filterJoinCondition)
-    {
-        this.operatorId = operatorId;
-        this.lookupSourceSupplier = lookupSourceSupplier;
-        this.probeTypes = probeTypes;
-        this.enableOuterJoin = enableOuterJoin;
+			LookupSourceSupplier lookupSourceSupplier, List<Type> probeTypes,
+			JoinType joinType, JoinProbeFactory joinProbeFactory,
+			boolean enableOuterJoin, FilterJoinCondition filterJoinCondition) {
+		this.operatorId = operatorId;
+		this.lookupSourceSupplier = lookupSourceSupplier;
+		this.probeTypes = probeTypes;
+		this.joinType = joinType;
 
-        this.joinProbeFactory = joinProbeFactory;
+		this.joinProbeFactory = joinProbeFactory;
 
-        this.types = ImmutableList.<Type>builder()
-                .addAll(probeTypes)
-                .addAll(lookupSourceSupplier.getTypes())
-                .build();
-        this.filterJoinCondition=filterJoinCondition;
-        
-    }
+		this.types = ImmutableList.<Type> builder().addAll(probeTypes)
+				.addAll(lookupSourceSupplier.getTypes()).build();
+		this.enableOuterJoin = enableOuterJoin;
+		this.filterJoinCondition = filterJoinCondition;
 
-    @Override
-    public List<Type> getTypes()
-    {
-        return types;
-    }
+	}
 
-    @Override
-    public Operator createOperator(DriverContext driverContext)
-    {
-        checkState(!closed, "Factory is already closed");
-        OperatorContext operatorContext = driverContext.addOperatorContext(operatorId, LookupJoinOperator.class.getSimpleName());
-        return new CustomizedLookupJoinOperator(operatorContext, lookupSourceSupplier, probeTypes, enableOuterJoin, joinProbeFactory,filterJoinCondition);
-    }
+	@Override
+	public List<Type> getTypes() {
+		return types;
+	}
 
-    @Override
-    public void close()
-    {
-        closed = true;
-    }
+	@Override
+	public Operator createOperator(DriverContext driverContext) {
+		checkState(!closed, "Factory is already closed");
+		OperatorContext operatorContext = driverContext.addOperatorContext(
+				operatorId, LookupJoinOperator.class.getSimpleName());
+		return new CustomizedLookupJoinOperator(operatorContext,
+				lookupSourceSupplier, probeTypes,joinType, joinProbeFactory,
+				enableOuterJoin, filterJoinCondition);
+	}
+
+	@Override
+	public void close() {
+		closed = true;
+	}
 }

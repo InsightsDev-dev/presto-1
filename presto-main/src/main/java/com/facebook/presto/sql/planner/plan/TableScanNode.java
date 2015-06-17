@@ -18,6 +18,7 @@ import com.facebook.presto.metadata.TableLayoutHandle;
 import com.facebook.presto.spi.ColumnHandle;
 import com.facebook.presto.spi.TupleDomain;
 import com.facebook.presto.sql.planner.Symbol;
+import com.facebook.presto.sql.planner.optimizations.ProteumTupleDomain;
 import com.facebook.presto.sql.tree.Expression;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -147,4 +148,12 @@ public class TableScanNode
                 .add("originalConstraint", originalConstraint)
                 .toString();
     }
+    private TupleDomain<ColumnHandle> proteumTupleDomain;
+	public void setProteumTupleDomain(
+			TupleDomain<ColumnHandle> proteumTupleDomain) {
+		this.proteumTupleDomain=proteumTupleDomain;
+	}
+	public  TupleDomain<ColumnHandle> getProteumTupleDomain() {
+		return proteumTupleDomain;
+	}
 }

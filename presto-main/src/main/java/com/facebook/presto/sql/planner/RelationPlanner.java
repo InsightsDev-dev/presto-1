@@ -326,7 +326,8 @@ class RelationPlanner
                     rightPlanBuilder.getRoot(),
                     equiClauses.build(),
                     Optional.empty(),
-                    Optional.empty());
+                    Optional.empty(),
+                    joinComparasions);
         }
         Optional<Symbol> sampleWeight = Optional.empty();
         if (leftPlanBuilder.getSampleWeight().isPresent() || rightPlanBuilder.getSampleWeight().isPresent()) {

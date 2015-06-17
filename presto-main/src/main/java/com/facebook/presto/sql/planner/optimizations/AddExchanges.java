@@ -545,11 +545,12 @@ public class AddExchanges
                     DomainTranslator.toPredicate(
                             node.getCurrentConstraint().transform(assignments::get),
                             symbolAllocator.getTypes()));
-
+            Constraint<ColumnHandle> constraint2 = new Constraint<>(simplifiedConstraint, bindings -> !shouldPrune(constraint, node.getAssignments(), bindings));
+            constraint2=new Constraint<>(new ProteumTupleDomain<>(constraint2.getSummary().getDomains(),decomposedPredicate.getRemainingExpression(),node.getProteumTupleDomain()), constraint2.predicate());
             // Layouts will be returned in order of the connector's preference
             List<TableLayoutResult> layouts = metadata.getLayouts(
                     node.getTable(),
-                    new Constraint<>(simplifiedConstraint, bindings -> !shouldPrune(constraint, node.getAssignments(), bindings)),
+                    constraint2,
                     Optional.of(node.getOutputSymbols().stream()
                             .map(node.getAssignments()::get)
                             .collect(toImmutableSet())));
@@ -576,7 +577,7 @@ public class AddExchanges
                                 Optional.of(layout.getLayout().getHandle()),
                                 simplifiedConstraint.intersect(layout.getLayout().getPredicate()),
                                 Optional.ofNullable(node.getOriginalConstraint()).orElse(predicate));
-
+                        tableScan.setProteumTupleDomain(node.getProteumTupleDomain());
                         PlanWithProperties result = new PlanWithProperties(tableScan, deriveProperties(tableScan, ImmutableList.of()));
 
                         Expression resultingPredicate = combineConjuncts(
@@ -715,7 +716,8 @@ public class AddExchanges
                     right.getNode(),
                     node.getCriteria(),
                     node.getLeftHashSymbol(),
-                    node.getRightHashSymbol());
+                    node.getRightHashSymbol(),
+                    node.getComparisons());
 
             return new PlanWithProperties(result, deriveProperties(result, ImmutableList.of(left.getProperties(), right.getProperties())));
         }

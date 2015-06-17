@@ -204,7 +204,7 @@ public class UnaliasSymbolReferences
             if (node.getOriginalConstraint() != null) {
                 originalConstraint = canonicalize(node.getOriginalConstraint());
             }
-            return new TableScanNode(
+            TableScanNode tableScanNode= new TableScanNode(
                     node.getId(),
                     node.getTable(),
                     canonicalize(node.getOutputSymbols()),
@@ -212,6 +212,8 @@ public class UnaliasSymbolReferences
                     node.getLayout(),
                     node.getCurrentConstraint(),
                     originalConstraint);
+            tableScanNode.setProteumTupleDomain(node.getProteumTupleDomain());
+            return tableScanNode;
         }
 
         @Override
@@ -311,7 +313,10 @@ public class UnaliasSymbolReferences
         {
             PlanNode left = context.rewrite(node.getLeft());
             PlanNode right = context.rewrite(node.getRight());
+            if(node.getComparisons()!=null){
+                return new JoinNode(node.getId(), node.getType(), left, right, canonicalizeJoinCriteria(node.getCriteria()), node.getLeftHashSymbol(), node.getRightHashSymbol(),canonicalize(node.getComparisons()));
 
+            }
             return new JoinNode(node.getId(), node.getType(), left, right, canonicalizeJoinCriteria(node.getCriteria()), node.getLeftHashSymbol(), node.getRightHashSymbol());
         }
 

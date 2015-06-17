@@ -230,6 +230,13 @@ public class MetadataManager
         return Optional.empty();
     }
 
+    public void isAggregatePushDownable(TableHandle table,
+			com.google.common.base.Optional<TupleDomain<ColumnHandle>> tupleDomain) {
+        String connectorId = table.getConnectorId();
+        ConnectorTableHandle connectorTable = table.getConnectorHandle();
+    	ConnectorSplitManager connectorSplitManager = splitManager.getConnectorSplitManager(connectorId);
+    	connectorSplitManager.getPartitions(connectorTable, tupleDomain.get());
+	}
     @Override
     public List<TableLayoutResult> getLayouts(TableHandle table, Constraint<ColumnHandle> constraint, Optional<Set<ColumnHandle>> desiredColumns)
     {

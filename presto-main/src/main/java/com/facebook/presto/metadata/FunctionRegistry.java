@@ -74,11 +74,9 @@ import com.facebook.presto.operator.window.NthValueFunction.BooleanNthValueFunct
 import com.facebook.presto.operator.window.NthValueFunction.DoubleNthValueFunction;
 import com.facebook.presto.operator.window.NthValueFunction.VarcharNthValueFunction;
 import com.facebook.presto.operator.window.NthValueFunction.TimestampNthValueFunction;
-import com.facebook.presto.operator.window.SumFunction.BigintSumFunction;
 import com.facebook.presto.operator.window.PercentRankFunction;
 import com.facebook.presto.operator.window.RankFunction;
 import com.facebook.presto.operator.window.RowNumberFunction;
-import com.facebook.presto.operator.window.SumFunction.DoubleSumFunction;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.block.BlockEncodingSerde;
 import com.facebook.presto.spi.type.StandardTypes;
@@ -292,8 +290,6 @@ public class FunctionRegistry
                 .window("lead", TIMESTAMP, ImmutableList.<Type>of(TIMESTAMP), TimestampLeadFunction.class)
                 .window("lead", TIMESTAMP, ImmutableList.<Type>of(TIMESTAMP, BIGINT), TimestampLeadFunction.class)
                 .window("lead", TIMESTAMP, ImmutableList.<Type>of(TIMESTAMP, BIGINT, VARCHAR), TimestampLeadFunction.class)
-                .window("cum_sum", BIGINT, ImmutableList.<Type>of(BIGINT), BigintSumFunction.class)
-                .window("cum_sum", DOUBLE, ImmutableList.<Type>of(DOUBLE), DoubleSumFunction.class)
                 .aggregate(CountAggregation.class)
                 .aggregate(VarianceAggregation.class)
                 .aggregate(ApproximateLongPercentileAggregations.class)

@@ -136,7 +136,7 @@ public class PickLayout
                     Optional.of(layout.getLayout().getHandle()),
                     simplifiedConstraint.intersect(layout.getLayout().getPredicate()),
                     Optional.ofNullable(node.getOriginalConstraint()).orElse(predicate));
-
+            result.setProteumTupleDomain(node.getProteumTupleDomain());
             Map<ColumnHandle, Symbol> assignments = ImmutableBiMap.copyOf(node.getAssignments()).inverse();
             Expression resultingPredicate = combineConjuncts(
                     decomposedPredicate.getRemainingExpression(),

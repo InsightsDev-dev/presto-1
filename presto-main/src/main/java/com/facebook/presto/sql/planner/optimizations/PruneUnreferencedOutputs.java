@@ -155,7 +155,6 @@ public class PruneUnreferencedOutputs
             if (node.getLeftHashSymbol().isPresent()) {
                 leftInputsBuilder.add(node.getLeftHashSymbol().get());
             }
-            Set<Symbol> leftInputs = leftInputsBuilder.build();
 
             ImmutableSet.Builder<Symbol> rightInputsBuilder = ImmutableSet.builder();
             rightInputsBuilder.addAll(context.get()).addAll(Iterables.transform(node.getCriteria(), JoinNode.EquiJoinClause::getRight));
@@ -163,12 +162,20 @@ public class PruneUnreferencedOutputs
                 rightInputsBuilder.add(node.getRightHashSymbol().get());
             }
 
+            if (node.getComparasionClauses() != null) {
+                if (node.getComparasionClauses().getLeft() != null && node.getComparasionClauses().getRight() != null) {
+                	leftInputsBuilder.addAll(node.getComparasionClauses().getLeft());
+                	rightInputsBuilder.addAll(node.getComparasionClauses().getRight());
+                } else {
+                    throw new RuntimeException("Should not happen!!!.Error in logic");
+                }
+            }
+            Set<Symbol> leftInputs = leftInputsBuilder.build();
             Set<Symbol> rightInputs = rightInputsBuilder.build();
-
             PlanNode left = context.rewrite(node.getLeft(), leftInputs);
             PlanNode right = context.rewrite(node.getRight(), rightInputs);
 
-            return new JoinNode(node.getId(), node.getType(), left, right, node.getCriteria(), node.getLeftHashSymbol(), node.getRightHashSymbol());
+            return new JoinNode(node.getId(), node.getType(), left, right, node.getCriteria(), node.getLeftHashSymbol(), node.getRightHashSymbol(),node.getComparisons());
         }
 
         @Override
@@ -354,7 +361,7 @@ public class PruneUnreferencedOutputs
 
             Map<Symbol, ColumnHandle> newAssignments = Maps.filterKeys(node.getAssignments(), in(requiredTableScanOutputs));
 
-            return new TableScanNode(
+            TableScanNode tableScanNode= new TableScanNode(
                     node.getId(),
                     node.getTable(),
                     newOutputSymbols,
@@ -362,6 +369,8 @@ public class PruneUnreferencedOutputs
                     node.getLayout(),
                     node.getCurrentConstraint(),
                     node.getOriginalConstraint());
+            tableScanNode.setProteumTupleDomain(node.getProteumTupleDomain());
+            return tableScanNode;
         }
 
         @Override
