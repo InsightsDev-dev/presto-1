@@ -23,7 +23,6 @@ import com.facebook.presto.spi.ConnectorTableMetadata;
 import com.facebook.presto.sql.analyzer.Analysis;
 import com.facebook.presto.sql.analyzer.Field;
 import com.facebook.presto.sql.analyzer.TupleDescriptor;
-import com.facebook.presto.sql.planner.optimizations.CustomizedPredicatePushDownContext;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.facebook.presto.sql.planner.plan.OutputNode;
 import com.facebook.presto.sql.planner.plan.PlanNode;
