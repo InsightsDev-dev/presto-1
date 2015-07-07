@@ -30,6 +30,7 @@ import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.DomainTranslator;
 import com.facebook.presto.sql.planner.ExpressionInterpreter;
+import com.facebook.presto.sql.planner.ExpressionSymbolInliner;
 import com.facebook.presto.sql.planner.LookupSymbolResolver;
 import com.facebook.presto.sql.planner.PlanNodeIdAllocator;
 import com.facebook.presto.sql.planner.Symbol;
@@ -60,8 +61,10 @@ import com.facebook.presto.sql.planner.plan.ValuesNode;
 import com.facebook.presto.sql.planner.plan.WindowNode;
 import com.facebook.presto.sql.tree.BooleanLiteral;
 import com.facebook.presto.sql.tree.Expression;
+import com.facebook.presto.sql.tree.ExpressionTreeRewriter;
 import com.facebook.presto.sql.tree.FunctionCall;
 import com.facebook.presto.sql.tree.NullLiteral;
+import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.sql.tree.QualifiedNameReference;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.CacheBuilder;
@@ -74,6 +77,7 @@ import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -546,7 +550,22 @@ public class AddExchanges
                             node.getCurrentConstraint().transform(assignments::get),
                             symbolAllocator.getTypes()));
             Constraint<ColumnHandle> constraint2 = new Constraint<>(simplifiedConstraint, bindings -> !shouldPrune(constraint, node.getAssignments(), bindings));
-            constraint2=new Constraint<>(new ProteumTupleDomain<>(constraint2.getSummary().getDomains(),decomposedPredicate.getRemainingExpression(),node.getProteumTupleDomain()), constraint2.predicate());
+            final Map<Symbol, QualifiedNameReference> symbolToColumnName = new HashMap<Symbol, QualifiedNameReference>();
+			for (Map.Entry<Symbol, ColumnHandle> entry : node
+					.getAssignments().entrySet()) {
+				symbolToColumnName.put(
+						entry.getKey(),
+						new QualifiedNameReference(new QualifiedName(
+								metadata.getColumnMetadata(
+										node.getTable(),
+										entry.getValue()).getName())));
+			}
+    		Expression remainingExpression=ExpressionTreeRewriter.rewriteWith(new ExpressionSymbolInliner(symbolToColumnName), decomposedPredicate.getRemainingExpression());
+    		ProteumTupleDomain proteumTupleDomain=new ProteumTupleDomain<>(constraint2.getSummary().getDomains(),
+           		 remainingExpression
+           		,node.getProteumTupleDomain());
+           		constraint2=new Constraint<>(proteumTupleDomain, constraint2.predicate());
+            System.out.println("Pusdown Predicates: Presto Expression :"+predicate+" Dimension Expression: "+proteumTupleDomain.getMinimumExpression() +" Unextracted Expression: "+decomposedPredicate.getRemainingExpression());
             // Layouts will be returned in order of the connector's preference
             List<TableLayoutResult> layouts = metadata.getLayouts(
                     node.getTable(),

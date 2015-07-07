@@ -991,6 +991,15 @@ public class PredicatePushDown
 			Map<Symbol, Signature> functionMap = new HashMap<Symbol, Signature>();
 			Map<Symbol, Expression> modifiTempMap = new HashMap<Symbol, Expression>();
 			final Map<Symbol, QualifiedNameReference> symbolToColumnName = new HashMap<Symbol, QualifiedNameReference>();
+			for (Map.Entry<Symbol, ColumnHandle> entry : node
+					.getAssignments().entrySet()) {
+				symbolToColumnName.put(
+						entry.getKey(),
+						new QualifiedNameReference(new QualifiedName(
+								metadata.getColumnMetadata(
+										node.getTable(),
+										entry.getValue()).getName())));
+			}
 			// global variable ends
 			try {
 				if ((inheritedPredicate.getAggregations() != null && !inheritedPredicate
@@ -1278,7 +1287,8 @@ public class PredicatePushDown
 			}
 			
 			ProteumTupleDomain<ColumnHandle> proteumTupleDomain2 = new ProteumTupleDomain<ColumnHandle>(
-					java.util.Collections.emptyMap(), predicate);
+					java.util.Collections.emptyMap(), 
+					ExpressionTreeRewriter.rewriteWith(new ExpressionSymbolInliner(symbolToColumnName), predicate));
 			TupleDomain<ColumnHandle> proteumTupleDomain = proteumTupleDomain2;
 			if (pushDownAggregationListIterable != null
 					&& groupByIterable != null && shouldPushDownAggregation) {
@@ -1333,6 +1343,8 @@ public class PredicatePushDown
 						.put(node,
 								new PredicatePushDownContext(allExpression,
 										inheritedPredicate));
+			}else{
+				proteumTupleDomain2.setMinimumExpression(BooleanLiteral.TRUE_LITERAL);
 			}
 			node.setProteumTupleDomain(proteumTupleDomain2);
             if (BooleanLiteral.FALSE_LITERAL.equals(predicate) || predicate instanceof NullLiteral) {
