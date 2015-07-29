@@ -40,6 +40,7 @@ import com.facebook.presto.spi.type.TypeManager;
 import com.facebook.presto.spi.type.TypeSignature;
 import com.facebook.presto.split.SplitManager;
 import com.facebook.presto.sql.analyzer.FeaturesConfig;
+import com.facebook.presto.sql.planner.optimizations.ProteumTupleDomain;
 import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.type.TypeDeserializer;
 import com.facebook.presto.type.TypeRegistry;
@@ -235,7 +236,14 @@ public class MetadataManager
         String connectorId = table.getConnectorId();
         ConnectorTableHandle connectorTable = table.getConnectorHandle();
     	ConnectorSplitManager connectorSplitManager = splitManager.getConnectorSplitManager(connectorId);
+    	try{
     	connectorSplitManager.getPartitions(connectorTable, tupleDomain.get());
+    	}catch(Exception e){
+    		TupleDomain<ColumnHandle> tupleDomain2 = tupleDomain.get();
+    		if(tupleDomain2 instanceof ProteumTupleDomain){
+    			((ProteumTupleDomain<ColumnHandle>)tupleDomain2).setAggregatePushDownable(false);
+    		}
+    	}
 	}
     @Override
     public List<TableLayoutResult> getLayouts(TableHandle table, Constraint<ColumnHandle> constraint, Optional<Set<ColumnHandle>> desiredColumns)
