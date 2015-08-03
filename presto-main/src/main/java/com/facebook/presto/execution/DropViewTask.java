@@ -38,13 +38,14 @@ public class DropViewTask
     public void execute(DropView statement, Session session, Metadata metadata, QueryStateMachine stateMachine)
     {
         QualifiedTableName name = createQualifiedTableName(session, statement.getName());
-
+        if(!session.getCatalog().equals("proteum")){
         Optional<ViewDefinition> view = metadata.getView(session, name);
         if (!view.isPresent()) {
             if (!statement.isExists()) {
                 throw new SemanticException(MISSING_TABLE, statement, "View '%s' does not exist", name);
             }
             return;
+        }
         }
 
         metadata.dropView(session, name);
