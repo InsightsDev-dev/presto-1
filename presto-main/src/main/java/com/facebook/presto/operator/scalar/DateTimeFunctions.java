@@ -33,6 +33,8 @@ import org.joda.time.format.DateTimeFormatterBuilder;
 import java.util.Locale;
 
 import static com.facebook.presto.operator.scalar.QuarterOfYearDateTimeField.QUARTER_OF_YEAR;
+import static com.facebook.presto.operator.scalar.FiveMinuteOfHourDataTimeField.FIVE_MINUTE_OF_HOUR;
+
 import static com.facebook.presto.spi.StandardErrorCode.INVALID_FUNCTION_ARGUMENT;
 import static com.facebook.presto.spi.type.DateTimeEncoding.packDateTimeWithZone;
 import static com.facebook.presto.spi.type.DateTimeEncoding.unpackMillisUtc;
@@ -394,6 +396,8 @@ public final class DateTimeFunctions
                 return chronology.monthOfYear();
             case "quarter":
                 return QUARTER_OF_YEAR.getField(chronology);
+            case "five_minute":
+            	return FIVE_MINUTE_OF_HOUR.getField(chronology);
             case "year":
                 return chronology.year();
         }
