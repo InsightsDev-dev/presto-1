@@ -176,7 +176,7 @@ public class StatementResource
             explainQuery = true;
             query = query.substring(query.indexOf(" ")+1);
         }
-        if(!query.toLowerCase().startsWith("select"))return query;
+        if(!query.toLowerCase().startsWith("select") && !query.toLowerCase().startsWith("create"))return query;
         try {
             Method method = proteumMetadata.getClass().getMethod("getBaseURL");
             String baseURL = method.invoke(proteumMetadata,null).toString();
