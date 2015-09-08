@@ -98,7 +98,16 @@ public class StatementClient
 
         Request request = buildQueryRequest(session, query);
         JsonResponse<QueryResults> response = httpClient.execute(request, responseHandler);
-
+        
+        if(response.getStatusCode()==HttpStatus.INTERNAL_SERVER_ERROR.code() && response.getException()!=null
+        		&& response.getException().getMessage()!=null
+        		&& response.getException().getMessage().startsWith(
+        				"Unable to create class com.facebook.presto.client.QueryResults from JSON response:"
+        				+ "")){
+        	throw new RuntimeException(response.getException().getMessage().substring(
+        			"Unable to create class com.facebook.presto.client.QueryResults from JSON response:"
+        			.length()));
+        }
         if (response.getStatusCode() != HttpStatus.OK.code() || !response.hasValue()) {
             throw requestFailedException("starting query", request, response);
         }

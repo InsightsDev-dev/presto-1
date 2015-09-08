@@ -157,8 +157,14 @@ public class StatementResource
     {
         assertRequest(!isNullOrEmpty(statement), "SQL statement is empty");
         Session session = createSessionForRequest(servletRequest);
-        if(session.getCatalog().equals("proteum"))
-            statement = rewriteQuery(statement);
+        if (session.getCatalog().equals("proteum")){
+			try{
+			statement = rewriteQuery(statement);
+			}catch(Exception e){
+				ResponseBuilder response = Response.status(Status.INTERNAL_SERVER_ERROR).entity(e.getMessage());
+				return response.build();
+			}
+		}
         ExchangeClient exchangeClient = exchangeClientSupplier.get();
         Query query = new Query(session, statement, queryManager, exchangeClient);
         queries.put(query.getQueryId(), query);
@@ -177,6 +183,7 @@ public class StatementResource
             query = query.substring(query.indexOf(" ")+1);
         }
         if(!query.toLowerCase().startsWith("select") && !query.toLowerCase().startsWith("create"))return query;
+		boolean throwError=false;
         try {
             Method method = proteumMetadata.getClass().getMethod("getBaseURL");
             String baseURL = method.invoke(proteumMetadata,null).toString();
@@ -190,6 +197,16 @@ public class StatementResource
                     connection.getInputStream()));
             result = in.readLine();
             String schema;
+			if (result.toUpperCase().startsWith("ERROR:")) {
+				throwError=true;
+				StringBuilder output = new StringBuilder();
+				String inputLine;
+				output.append(result);
+				while ((inputLine = in.readLine()) != null) {
+					output.append(inputLine);
+				}
+				throw new RuntimeException(output.substring("ERROR:".length()));
+			}
             method = proteumMetadata.getClass().getMethod("addTable", String.class);
             while((schema = in.readLine())!=null){
                 Object returnValue = method.invoke(proteumMetadata, schema);
@@ -198,7 +215,9 @@ public class StatementResource
             connection.disconnect();
             
         } catch (Exception e) {
-            // TODO Auto-generated catch block
+        	if(throwError){
+				throw new RuntimeException(e);
+			}
             return originalQuery;
         }
         if(explainQuery) result = "explain "+result;
