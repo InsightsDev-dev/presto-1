@@ -1028,6 +1028,9 @@ public class PredicatePushDown
 					Function<Symbol, Symbol> syFunction = new Function<Symbol, Symbol>() {
 						@Override
 						public Symbol apply(Symbol symbol) {
+							if(!symbolToColumnName.containsKey(symbol)){
+								throw new RuntimeException("Column not found for symbol :"+symbol);
+							}
 							return new Symbol(symbolToColumnName.get(symbol)
 									.getName().toString());
 						}
@@ -1039,11 +1042,15 @@ public class PredicatePushDown
 					Iterable<Expression> simplifiedAggregates = transform(
 							aggregateList, ff);
 					// System.out.println(simplifiedAggregates);
-
+					boolean error=false;
+					try{
 					groupByIterable = transform(
 							inheritedPredicate.getGroupBy(), syFunction);
+					}catch(Exception e){
+						error=true;
+					}
 					// System.out.println(groupByIterable);
-					if (inheritedPredicate.getGroupBy() != null) {
+					if (!error && inheritedPredicate.getGroupBy() != null) {
 						shouldPushDownAggregation = true;
 						for (Entry<Symbol, FunctionCall> entry : inheritedPredicate
 								.getAggregations().entrySet()) {
@@ -1270,13 +1277,18 @@ public class PredicatePushDown
 				}
 				System.out.println("******************************");
 				if (shouldPushDownAggregation) {
-					List<Symbol> groupByPushDownable = Lists.newArrayList(Lists
-							.newArrayList(groupByIterable));
+					try{
+					List<Symbol> groupByPushDownable = Lists
+							.newArrayList(groupByIterable);
 					groupByPushDownable.addAll(distinctColumns);
 					groupByIterable = groupByPushDownable;
 					System.out.println("PushDownAggregationList is "
 							+ pushDownAggregationListIterable);
 					System.out.println("PushDownGroupBy is " + groupByIterable);
+					}catch(Exception e){
+						shouldPushDownAggregation=false;
+						System.out.println("Nothing to pushDown.Exception :"+e.getMessage());
+					}
 				} else {
 					System.out.println("Nothing to pushDown");
 				}
@@ -1284,6 +1296,7 @@ public class PredicatePushDown
 			} catch (Exception e) {
 				System.out.println("Unable to Push Down Group By.Exception: "
 						+ e.getMessage());
+				shouldPushDownAggregation=false;
 			}
 			
 			ProteumTupleDomain<ColumnHandle> proteumTupleDomain2 = new ProteumTupleDomain<ColumnHandle>(
