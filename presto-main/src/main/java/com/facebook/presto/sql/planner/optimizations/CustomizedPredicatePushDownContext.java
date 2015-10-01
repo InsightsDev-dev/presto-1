@@ -21,20 +21,28 @@ import com.google.common.collect.ImmutableMap;
  * @Date 01-May-2015
  */
 public class CustomizedPredicatePushDownContext {
-	private final IdentityHashMap<PlanNode, PredicatePushDownContext> pushDownPredicateMap;
+	private final HashMap<PlanNodeId, PredicatePushDownContext> pushDownPredicateMap;
+	private final HashMap<PlanNodeId, Map<FunctionCall,FunctionCall>> newFunctionCallVsPreviousFunctionCall;
+
 	private final Map<PlanNodeId, Map<Symbol, Expression>> symbolToExpressionMap;
 
 	public CustomizedPredicatePushDownContext() {
-		pushDownPredicateMap = new IdentityHashMap<PlanNode, PredicatePushDownContext>();
+		pushDownPredicateMap = new HashMap<PlanNodeId, PredicatePushDownContext>();
 		symbolToExpressionMap = new HashMap<PlanNodeId, Map<Symbol, Expression>>();
+		newFunctionCallVsPreviousFunctionCall=new HashMap<PlanNodeId, Map<FunctionCall,FunctionCall>>();
 	}
 
-	public IdentityHashMap<PlanNode, PredicatePushDownContext> getPushDownPredicateMap() {
+	public HashMap<PlanNodeId, PredicatePushDownContext> getPushDownPredicateMap() {
 		return pushDownPredicateMap;
 	}
 
 	public Map<PlanNodeId, Map<Symbol, Expression>> getSymbolToExpressionMap() {
 		return symbolToExpressionMap;
 	}
+
+	public HashMap<PlanNodeId, Map<FunctionCall, FunctionCall>> getNewFunctionCallVsPreviousFunctionCall() {
+		return newFunctionCallVsPreviousFunctionCall;
+	}
+	
 
 }

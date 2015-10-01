@@ -22,6 +22,7 @@ import com.facebook.presto.spi.TupleDomain;
 import com.facebook.presto.spi.type.BigintType;
 import com.facebook.presto.spi.type.DoubleType;
 import com.facebook.presto.spi.type.Type;
+import com.facebook.presto.spi.type.VarcharType;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.DependencyExtractor;
 import com.facebook.presto.sql.planner.DeterminismEvaluator;
@@ -116,6 +117,7 @@ public class PredicatePushDown
 
     private final Metadata metadata;
     private final SqlParser sqlParser;
+	private  CustomizedPredicatePushDownContext customizedPredicatePushDownContext;
 
     public PredicatePushDown(Metadata metadata, SqlParser sqlParser)
     {
@@ -131,8 +133,21 @@ public class PredicatePushDown
         checkNotNull(types, "types is null");
         checkNotNull(idAllocator, "idAllocator is null");
 
-        return PlanRewriter.rewriteWith(new Rewriter(symbolAllocator, idAllocator, metadata, sqlParser, session), plan, PredicatePushDownContext.TRUE_LITERAL());
+        return PlanRewriter.rewriteWith(new Rewriter(symbolAllocator, idAllocator, metadata, sqlParser, session,getCustomizedPredicatePushDownContext()), plan, PredicatePushDownContext.TRUE_LITERAL());
     }
+    private CustomizedPredicatePushDownContext getCustomizedPredicatePushDownContext() {
+    	if(customizedPredicatePushDownContext==null){
+    		return new CustomizedPredicatePushDownContext();
+    	}
+		return customizedPredicatePushDownContext;
+	}
+
+
+
+	public void setCustomizedPredicatePushDownContext(
+			CustomizedPredicatePushDownContext customizedPredicatePushDownContext) {
+		this.customizedPredicatePushDownContext = customizedPredicatePushDownContext;
+	}
 
     private static class Rewriter
             extends PlanRewriter<PredicatePushDownContext>
@@ -142,7 +157,7 @@ public class PredicatePushDown
         private final Metadata metadata;
         private final SqlParser sqlParser;
         private final Session session;
-		private final CustomizedPredicatePushDownContext customizedPredicatePushDownContext;
+		private  CustomizedPredicatePushDownContext customizedPredicatePushDownContext;
 		private Map<Symbol, Expression> modifiMap = new HashMap<Symbol, Expression>();
 
         private Rewriter(
@@ -150,17 +165,18 @@ public class PredicatePushDown
                 PlanNodeIdAllocator idAllocator,
                 Metadata metadata,
                 SqlParser sqlParser,
-                Session session)
+                Session session,
+                CustomizedPredicatePushDownContext customizedPredicatePushDownContext)
         {
             this.symbolAllocator = checkNotNull(symbolAllocator, "symbolAllocator is null");
             this.idAllocator = checkNotNull(idAllocator, "idAllocator is null");
             this.metadata = checkNotNull(metadata, "metadata is null");
             this.sqlParser = checkNotNull(sqlParser, "sqlParser is null");
             this.session = checkNotNull(session, "session is null");
-			this.customizedPredicatePushDownContext = new CustomizedPredicatePushDownContext();
+			this.customizedPredicatePushDownContext = customizedPredicatePushDownContext;
         }
-
-        @Override
+        
+		@Override
         public PlanNode visitPlan(PlanNode node, RewriteContext<PredicatePushDownContext> context)
         {
             PlanNode rewrittenNode = context.defaultRewrite(node, PredicatePushDownContext.TRUE_LITERAL());
@@ -965,16 +981,23 @@ public class PredicatePushDown
         public PlanNode visitTableScan(TableScanNode node, RewriteContext<PredicatePushDownContext> context)
         {
         	PredicatePushDownContext predicatePushDownContext = customizedPredicatePushDownContext
-					.getPushDownPredicateMap().get(node);
+					.getPushDownPredicateMap().get(node.getId());
+        	Map<FunctionCall,FunctionCall> newFunctionCallVsPreviousFunctionCall=customizedPredicatePushDownContext
+        			.getNewFunctionCallVsPreviousFunctionCall().get(node.getId());
+        	if(newFunctionCallVsPreviousFunctionCall==null){
+        		newFunctionCallVsPreviousFunctionCall=new HashMap<FunctionCall,FunctionCall>();
+        		customizedPredicatePushDownContext.getNewFunctionCallVsPreviousFunctionCall().put(node.getId(), 
+        				newFunctionCallVsPreviousFunctionCall);
+        	}
 			if (predicatePushDownContext != null) {
 				context.get().setExpression(predicatePushDownContext
 						.getExpression());
-				context.get().setAggregations(predicatePushDownContext
-						.getAggregations());
-				context.get().setFunctionMap(predicatePushDownContext
-						.getFunctionMap());
-				context.get().setGroupBy(predicatePushDownContext
-						.getGroupBy());
+//				context.get().setAggregations(predicatePushDownContext
+//						.getAggregations());
+//				context.get().setFunctionMap(predicatePushDownContext
+//						.getFunctionMap());
+//				context.get().setGroupBy(predicatePushDownContext
+//						.getGroupBy());
 			}
 			PredicatePushDownContext inheritedPredicate = context.get();
             Expression predicate = simplifyExpression(context.get().getExpression());
@@ -1098,6 +1121,83 @@ public class PredicatePushDown
 											inheritedPredicate.getFunctionMap()
 													.get(entry.getKey()));
 								}
+							}else if(!entry.getValue().isDistinct()
+									&& (entry.getValue().getName().toString()
+									.equalsIgnoreCase("MIN")||entry.getValue().getName().toString()
+									.equalsIgnoreCase("MAX"))
+							&& isContainsOnlyOneColumn(entry.getValue())
+							&& (entry.getValue().getArguments().get(0) instanceof QualifiedNameReference)
+							&& isContainsOnlyOneBigIntVarcharOrDoubleColumn(
+									entry.getValue(), symbolAllocator)
+							&& isAloneOverAllOtherAggregations(entry
+									.getValue())
+							&& !containsAnyAggregates(groupByIterable,
+									entry.getValue())){
+
+								 shouldPushDownAggregation = true;
+	
+									pushDownAggregationList
+											.add(symbolToColumnAggregation
+													.get(entry.getValue()));
+								if (areArgumentsExpression(entry.getValue())) {
+									modifiTempMap
+											.put(new Symbol(
+													((QualifiedNameReference) entry
+															.getValue()
+															.getArguments()
+															.get(0)).getName()
+															.toString()),
+													new QualifiedNameReference(
+															getArgumentsAsSymbolList(
+																	entry.getValue())
+																	.get(0)
+																	.toQualifiedName()));
+									Symbol symbol = new Symbol(
+											((QualifiedNameReference) entry
+													.getValue().getArguments()
+													.get(0)).getName()
+													.toString());
+									Type type = symbolAllocator.getTypes().get(
+											symbol);
+									if (type.getDisplayName().equalsIgnoreCase(
+											"double")) {
+										modifiTempMap
+												.put(symbol,
+														new Cast(
+																new QualifiedNameReference(
+																		getArgumentsAsSymbolList(
+																				entry.getValue())
+																				.get(0)
+																				.toQualifiedName()),
+																DoubleType.DOUBLE
+																		.getTypeSignature()
+																		.toString()));
+										newMap.put(entry.getKey(),
+												entry.getValue());
+										functionMap
+												.put(entry.getKey(),
+														inheritedPredicate
+																.getFunctionMap()
+																.get(entry
+																		.getKey()));
+									} else {
+										newMap.put(entry.getKey(),
+												entry.getValue());
+										functionMap
+												.put(entry.getKey(),
+														inheritedPredicate
+																.getFunctionMap()
+																.get(entry
+																		.getKey()));
+									}
+									isModified = true;
+								}else{
+									newMap.put(entry.getKey(), entry.getValue());
+									functionMap.put(entry.getKey(),
+											inheritedPredicate.getFunctionMap()
+													.get(entry.getKey()));
+								}
+							
 							} else if (!entry.getValue().isDistinct()
 									&& entry.getValue().getName().toString()
 											.equalsIgnoreCase("SUM")
@@ -1110,7 +1210,7 @@ public class PredicatePushDown
 									&& !containsAnyAggregates(groupByIterable,
 											entry.getValue())) {
 								 shouldPushDownAggregation = true;
-								if (entry.getKey().getName().contains("count")) {
+								if (newFunctionCallVsPreviousFunctionCall.containsKey(entry.getValue())) {
 									pushDownAggregationList
 											.add(changeSumFunctionToCount(symbolToColumnAggregation
 													.get(entry.getValue())));
@@ -1255,6 +1355,7 @@ public class PredicatePushDown
 								isModified = true;
 								shouldPushDownAggregation = true;
 								pushDownAggregationList.add(entry.getValue());
+								newFunctionCallVsPreviousFunctionCall.put(functionCall, entry.getValue());
 								// System.out.println(entry.getKey() + " "
 								// + entry.getValue());
 							} else {
@@ -1353,7 +1454,7 @@ public class PredicatePushDown
 			if (proteumTupleDomain2.isAggregatePushDownable()
 					&& shouldPushDownAggregation) {
 				customizedPredicatePushDownContext.getPushDownPredicateMap()
-						.put(node,
+						.put(node.getId(),
 								new PredicatePushDownContext(allExpression,
 										inheritedPredicate));
 			}else{
@@ -1411,6 +1512,33 @@ public class PredicatePushDown
 				Symbol columnName = columns.get(0);
 				return symbolAllocator.getTypes().get(columnName)
 						.getDisplayName().equals(BigintType.BIGINT.toString());
+			}
+			return false;
+		}
+		
+		private boolean isContainsOnlyOneBigIntVarcharOrDoubleColumn(FunctionCall value,
+				SymbolAllocator symbolAllocator) {
+			final List<Symbol> columns = new ArrayList<Symbol>();
+			symbolToColumnAggregation
+					.get(value)
+					.accept(new DefaultExpressionTraversalVisitor<List<Symbol>, List<Symbol>>() {
+						@Override
+						protected List<Symbol> visitQualifiedNameReference(
+								QualifiedNameReference node,
+								List<Symbol> columns) {
+							columns.add(new Symbol(node.getName().toString()));
+							return columns;
+						}
+					}, columns);
+			if (columns.size() == 1) {
+				Symbol columnName = columns.get(0);
+				String typeName= symbolAllocator.getTypes().get(columnName)
+						.getDisplayName();
+				if(typeName.equals(BigintType.BIGINT.toString()) ||
+						typeName.equals(DoubleType.DOUBLE.toString()) ||
+						typeName.equals(VarcharType.VARCHAR.toString())  ){
+					return true;
+				}
 			}
 			return false;
 		}
