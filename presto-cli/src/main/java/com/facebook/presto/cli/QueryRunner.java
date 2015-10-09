@@ -83,7 +83,8 @@ public class QueryRunner
 
     private static HttpClientConfig getHttpClientConfig(Optional<HostAndPort> socksProxy)
     {
-        HttpClientConfig httpClientConfig = new HttpClientConfig().setConnectTimeout(new Duration(10, TimeUnit.SECONDS));
+        HttpClientConfig httpClientConfig = new HttpClientConfig().setConnectTimeout(new Duration(10, TimeUnit.SECONDS))
+        		.setIdleTimeout(new Duration(30, TimeUnit.MINUTES)).setRequestTimeout(new Duration(30, TimeUnit.MINUTES));
 
         if (socksProxy.isPresent()) {
             httpClientConfig.setSocksProxy(socksProxy.get());
