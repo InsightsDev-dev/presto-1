@@ -989,7 +989,7 @@ public class PredicatePushDown
         		customizedPredicatePushDownContext.getNewFunctionCallVsPreviousFunctionCall().put(node.getId(), 
         				newFunctionCallVsPreviousFunctionCall);
         	}
-			if (predicatePushDownContext != null) {
+			if (predicatePushDownContext != null && customizedPredicatePushDownContext.isPredicatePushdownable()) {
 				context.get().setExpression(predicatePushDownContext
 						.getExpression());
 //				context.get().setAggregations(predicatePushDownContext
@@ -1073,6 +1073,9 @@ public class PredicatePushDown
 						error=true;
 					}
 					// System.out.println(groupByIterable);
+					if(!customizedPredicatePushDownContext.isPredicatePushdownable() || !session.getCatalog().equals("proteum")){
+						error=true;
+					}
 					if (!error && inheritedPredicate.getGroupBy() != null) {
 						shouldPushDownAggregation = true;
 						for (Entry<Symbol, FunctionCall> entry : inheritedPredicate
@@ -1082,16 +1085,12 @@ public class PredicatePushDown
 							System.out.println(entry.getValue()
 									+ " is Resolved as "
 									+ columnNamedfunctioncall);
-							if (isContainsOnlyOneColumn(entry.getValue())
-									&& (entry.getValue().getArguments().get(0) instanceof QualifiedNameReference)
-									&& containsAnyAggregates(groupByIterable,
+							if (containsAnyAggregates(groupByIterable,
 											entry.getValue())) {
-								// here is functions on dimensions -----
-								// Cheers!!!:We need nothing to do here.
-								newMap.put(entry.getKey(), entry.getValue());
-								functionMap.put(entry.getKey(),
-										inheritedPredicate.getFunctionMap()
-												.get(entry.getKey()));
+								shouldPushDownAggregation = false;
+								System.out.println("Unable to push down aggregate: "+entry.getValue()+
+										" is in group by.");
+								break;
 							} else if (entry.getValue().isDistinct()
 									&& isContainsOnlyOneColumn(entry.getValue())
 									&& (entry.getValue().getArguments().get(0) instanceof QualifiedNameReference)
@@ -1391,7 +1390,9 @@ public class PredicatePushDown
 						System.out.println("Nothing to pushDown.Exception :"+e.getMessage());
 					}
 				} else {
+					if(customizedPredicatePushDownContext.isPredicatePushdownable()){
 					System.out.println("Nothing to pushDown");
+					}
 				}
 
 			} catch (Exception e) {
@@ -1409,13 +1410,18 @@ public class PredicatePushDown
 				proteumTupleDomain2.setGroupBy(groupByIterable);
 				proteumTupleDomain2
 						.setAggregateList(pushDownAggregationListIterable);
-				proteumTupleDomain2.setMinimumExpression(FilterRewriter
+				proteumTupleDomain2.setMinimumExpression(ExpressionTreeRewriter.rewriteWith
+						(new ExpressionSymbolInliner(symbolToColumnName),FilterRewriter
 						.remainingAfterRemovingAggregateFilterExpression(
 								symbolAllocator.getTypes(), groupByIterable,
 								symbolToColumnName,
-								inheritedPredicate.getExpression()));
+								inheritedPredicate.getExpression())));
 			}
+			if(shouldPushDownAggregation){
 			((MetadataManager)metadata).isAggregatePushDownable(node.getTable(), Optional.of(proteumTupleDomain));
+			}else{
+				proteumTupleDomain2.setAggregatePushDownable(false);
+			}
 			Expression postScanPredicate=predicate;
 			Expression allExpression = postScanPredicate;
 
@@ -1428,26 +1434,31 @@ public class PredicatePushDown
 				}
 				System.out
 						.println("Actual Filter is "
-								+ postScanPredicate
+								+ ExpressionTreeRewriter.rewriteWith
+								(new ExpressionSymbolInliner(symbolToColumnName),postScanPredicate)
 								+ " Aggregate filter is "
-								+ FilterRewriter.getAggregateFilterExpression(
+								+ ExpressionTreeRewriter.rewriteWith
+								(new ExpressionSymbolInliner(symbolToColumnName),FilterRewriter.getAggregateFilterExpression(
 										symbolAllocator.getTypes(),
 										groupByIterable, symbolToColumnName,
-										postScanPredicate)
+										postScanPredicate))
 								+ " Remaining is "
-								+ FilterRewriter
+								+ ExpressionTreeRewriter.rewriteWith
+								(new ExpressionSymbolInliner(symbolToColumnName),FilterRewriter
 										.remainingAfterRemovingAggregateFilterExpression(
 												symbolAllocator.getTypes(),
 												groupByIterable,
 												symbolToColumnName,
-												postScanPredicate));
+												postScanPredicate)));
 				Expression postScanPredicate2 = postScanPredicate;
 				postScanPredicate = FilterRewriter
 						.getAggregateFilterExpression(
 								symbolAllocator.getTypes(), groupByIterable,
 								symbolToColumnName, postScanPredicate);
-				System.out.println("Changed Filter from " + postScanPredicate2
-						+ " to " + postScanPredicate);
+				System.out.println("Changed Filter from " + ExpressionTreeRewriter.rewriteWith
+						(new ExpressionSymbolInliner(symbolToColumnName),postScanPredicate2)
+						+ " to " + ExpressionTreeRewriter.rewriteWith
+						(new ExpressionSymbolInliner(symbolToColumnName),postScanPredicate));
 				predicate=postScanPredicate;
 			}
 			System.out.println("******************************");
@@ -1673,11 +1684,11 @@ public class PredicatePushDown
 				hashSet.add(symbol);
 			}
 			for (Symbol s : columns) {
-				if (!hashSet.contains(s)) {
-					return false;
+				if (hashSet.contains(s)) {
+					return true;
 				}
 			}
-			return true;
+			return false;
 		}
 
 		private boolean isOnly(Symbol symbol,

@@ -565,7 +565,7 @@ public class AddExchanges
            		 remainingExpression
            		,node.getProteumTupleDomain());
            		constraint2=new Constraint<>(proteumTupleDomain, constraint2.predicate());
-            System.out.println("Pusdown Predicates: Presto Expression :"+predicate+" Dimension Expression: "+proteumTupleDomain.getMinimumExpression() +" Unextracted Expression: "+decomposedPredicate.getRemainingExpression());
+            System.out.println("Pusdown Predicates: Presto Expression :"+ExpressionTreeRewriter.rewriteWith(new ExpressionSymbolInliner(symbolToColumnName), predicate)+" Dimension Expression: "+proteumTupleDomain.getMinimumExpression() +" Unextracted Expression: "+remainingExpression);
             // Layouts will be returned in order of the connector's preference
             List<TableLayoutResult> layouts = metadata.getLayouts(
                     node.getTable(),

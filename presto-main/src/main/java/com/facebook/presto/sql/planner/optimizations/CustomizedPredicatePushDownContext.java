@@ -23,7 +23,7 @@ import com.google.common.collect.ImmutableMap;
 public class CustomizedPredicatePushDownContext {
 	private final HashMap<PlanNodeId, PredicatePushDownContext> pushDownPredicateMap;
 	private final HashMap<PlanNodeId, Map<FunctionCall,FunctionCall>> newFunctionCallVsPreviousFunctionCall;
-
+	private boolean predicatePushdownable=false;
 	private final Map<PlanNodeId, Map<Symbol, Expression>> symbolToExpressionMap;
 
 	public CustomizedPredicatePushDownContext() {
@@ -42,6 +42,13 @@ public class CustomizedPredicatePushDownContext {
 
 	public HashMap<PlanNodeId, Map<FunctionCall, FunctionCall>> getNewFunctionCallVsPreviousFunctionCall() {
 		return newFunctionCallVsPreviousFunctionCall;
+	}
+
+	public void setPredicatePushdownable(boolean isPredicatePushdownable) {
+		this.predicatePushdownable=isPredicatePushdownable;
+	}
+	public boolean isPredicatePushdownable() {
+		return this.predicatePushdownable;
 	}
 	
 
