@@ -1004,7 +1004,7 @@ public class PredicatePushDown
 
 			Iterable<Expression> pushDownAggregationListIterable = null;
 			Iterable<Symbol> groupByIterable = null;
-			List<Symbol> distinctColumns = new ArrayList<Symbol>();
+			Set<Symbol> distinctColumns = new HashSet<Symbol>();
 			// should be push down group by columns to proteum
 			Set<Expression> pushDownAggregationList = new HashSet<Expression>();
 			boolean shouldPushDownAggregation = false;
