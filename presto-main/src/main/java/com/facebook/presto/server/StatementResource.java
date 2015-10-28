@@ -38,6 +38,7 @@ import com.facebook.presto.spi.ConnectorMetadata;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.ErrorCode;
 import com.facebook.presto.spi.Page;
+import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.block.Block;
 import com.facebook.presto.spi.type.StandardTypes;
 import com.facebook.presto.spi.type.Type;
@@ -76,14 +77,9 @@ import javax.ws.rs.core.Response.ResponseBuilder;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.UriInfo;
 
-import java.io.BufferedReader;
 import java.io.Closeable;
-import java.io.InputStreamReader;
 import java.lang.reflect.Method;
-import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URL;
-import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -100,6 +96,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_CLEAR_SESSION;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_SET_SESSION;
+import static com.facebook.presto.server.ResourceUtil.assertRequest;
 import static com.facebook.presto.server.ResourceUtil.createSessionForRequest;
 import static com.facebook.presto.spi.StandardErrorCode.INTERNAL_ERROR;
 import static com.facebook.presto.spi.StandardErrorCode.toErrorType;
@@ -157,86 +154,37 @@ public class StatementResource
     {
         assertRequest(!isNullOrEmpty(statement), "SQL statement is empty");
         Session session = createSessionForRequest(servletRequest);
+        
+        String proteumQueryId=null;
         if (session.getCatalog().equals("proteum")){
 			try{
-			statement = rewriteQuery(statement);
+			ConnectorMetadata proteumMetadata = metaManager.getConnectorMetadataById("proteum");
+			Method method = proteumMetadata.getClass().getMethod("rewriteQuery",String.class);
+			 RewriteQueryResponse rewriteQueryResponse=
+					 (RewriteQueryResponse)method.invoke(proteumMetadata,statement);
+			 proteumQueryId = rewriteQueryResponse.getProteumQueryId();
+			statement =rewriteQueryResponse.getQuery();
 			}catch(Exception e){
-				ResponseBuilder response = Response.status(Status.INTERNAL_SERVER_ERROR).entity(e.getMessage());
-				return response.build();
+				if(e.getClass().equals(PrestoException.class)){
+				//@Todo : dilip Uncomment below code when Everything works fine.
+//				ResponseBuilder response = Response.status(Status.INTERNAL_SERVER_ERROR).entity(e.getMessage());
+//				return response.build();
+				}
 			}
 		}
         ExchangeClient exchangeClient = exchangeClientSupplier.get();
         Query query = new Query(session, statement, queryManager, exchangeClient);
         queries.put(query.getQueryId(), query);
-
-        return Response.ok(query.getNextResults(uriInfo, new Duration(1, TimeUnit.MILLISECONDS))).build();
-    }
-    private String rewriteQuery(String query){
-        ConnectorMetadata proteumMetadata = metaManager.getConnectorMetadataById("proteum");
-        
-        String originalQuery = query;
-        boolean explainQuery = false;
-        URL url = null;
-        String result = null;
-        if(query.toLowerCase().startsWith("explain")){
-            explainQuery = true;
-            query = query.substring(query.indexOf(" ")+1);
+        if(proteumQueryId!=null){
+        	try{
+        		ConnectorMetadata proteumMetadata = metaManager.getConnectorMetadataById("proteum");
+    			Method method = proteumMetadata.getClass().getMethod("updateQueryId",String.class,String.class);
+    			method.invoke(proteumMetadata, proteumQueryId,query.getQueryId().getId());
+        	}catch(Exception e){
+        		
+        	}
         }
-        if(!query.toLowerCase().startsWith("select") && !query.toLowerCase().startsWith("create"))return query;
-		boolean throwError=false;
-        try {
-            Method method = proteumMetadata.getClass().getMethod("getBaseURL");
-            String baseURL = method.invoke(proteumMetadata,null).toString();
-            //query = query.replaceAll(" ", "%20");
-            String encodedString = URLEncoder.encode("q={"+query, "UTF-8");
-            url = new URL(baseURL+"/rewrite?"+encodedString);
-            HttpURLConnection connection = (HttpURLConnection)url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.connect();
-            BufferedReader in = new BufferedReader(new InputStreamReader(
-                    connection.getInputStream()));
-            result = in.readLine();
-            String schema;
-			if (result.toUpperCase().startsWith("ERROR:")) {
-				throwError=true;
-				StringBuilder output = new StringBuilder();
-				String inputLine;
-				output.append(result);
-				while ((inputLine = in.readLine()) != null) {
-					output.append(inputLine);
-				}
-				throw new RuntimeException(output.substring("ERROR:".length()));
-			}
-            method = proteumMetadata.getClass().getMethod("addTable", String.class);
-            while((schema = in.readLine())!=null){
-                Object returnValue = method.invoke(proteumMetadata, schema);
-            }
-            in.close();
-            connection.disconnect();
-            
-        } catch (Exception e) {
-        	if(throwError){
-				throw new RuntimeException(e);
-			}
-            return originalQuery;
-        }
-        if(explainQuery) result = "explain "+result;
-        return result;
-    }
-    static void assertRequest(boolean expression, String format, Object... args)
-    {
-        if (!expression) {
-            throw badRequest(format(format, args));
-        }
-    }
-
-    private static WebApplicationException badRequest(String message)
-    {
-        throw new WebApplicationException(Response
-                .status(Status.BAD_REQUEST)
-                .type(MediaType.TEXT_PLAIN)
-                .entity(message)
-                .build());
+        return getQueryResults(query, Optional.empty(), uriInfo, new Duration(1, MILLISECONDS));
     }
 
     @GET

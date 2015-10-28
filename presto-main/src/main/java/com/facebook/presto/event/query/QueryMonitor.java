@@ -19,9 +19,12 @@ import com.facebook.presto.execution.QueryStats;
 import com.facebook.presto.execution.StageInfo;
 import com.facebook.presto.execution.TaskId;
 import com.facebook.presto.execution.TaskInfo;
+import com.facebook.presto.metadata.Metadata;
+import com.facebook.presto.metadata.MetadataManager;
 import com.facebook.presto.metadata.NodeVersion;
 import com.facebook.presto.operator.DriverStats;
 import com.facebook.presto.operator.TaskStats;
+import com.facebook.presto.spi.ConnectorMetadata;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Throwables;
@@ -35,6 +38,7 @@ import org.joda.time.DateTime;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 
@@ -49,6 +53,7 @@ public class QueryMonitor
     private final EventClient eventClient;
     private final String environment;
     private final String serverVersion;
+    private MetadataManager metadataManager;
 
     @Inject
     public QueryMonitor(ObjectMapper objectMapper, EventClient eventClient, NodeInfo nodeInfo, NodeVersion nodeVersion)
@@ -58,25 +63,37 @@ public class QueryMonitor
         this.environment = checkNotNull(nodeInfo, "nodeInfo is null").getEnvironment();
         this.serverVersion = checkNotNull(nodeVersion, "nodeVersion is null").toString();
     }
-
+    @Inject
+    public void setMetadata(MetadataManager metadataManager) {
+      this.metadataManager=metadataManager;
+    }
     public void createdEvent(QueryInfo queryInfo)
     {
-        eventClient.post(
-                new QueryCreatedEvent(
-                        queryInfo.getQueryId(),
-                        queryInfo.getSession().getUser(),
-                        queryInfo.getSession().getSource(),
-                        serverVersion,
-                        environment,
-                        queryInfo.getSession().getCatalog(),
-                        queryInfo.getSession().getSchema(),
-                        queryInfo.getSession().getRemoteUserAddress(),
-                        queryInfo.getSession().getUserAgent(),
-                        queryInfo.getSelf(),
-                        queryInfo.getQuery(),
-                        queryInfo.getQueryStats().getCreateTime()
-                )
+
+        QueryCreatedEvent queryCreatedEvent = new QueryCreatedEvent(
+                queryInfo.getQueryId(),
+                queryInfo.getSession().getUser(),
+                queryInfo.getSession().getSource(),
+                serverVersion,
+                environment,
+                queryInfo.getSession().getCatalog(),
+                queryInfo.getSession().getSchema(),
+                queryInfo.getSession().getRemoteUserAddress(),
+                queryInfo.getSession().getUserAgent(),
+                queryInfo.getSelf(),
+                queryInfo.getQuery(),
+                queryInfo.getQueryStats().getCreateTime()
         );
+        eventClient.post(queryCreatedEvent);
+        try{
+        if(queryInfo.getSession().getCatalog().equals("proteum")){
+        ConnectorMetadata proteumMetadata = metadataManager.getConnectorMetadataById("proteum");
+        Method method = proteumMetadata.getClass().getMethod("handleEvent",QueryCreatedEvent.class);
+        method.invoke(proteumMetadata,queryCreatedEvent);
+        }
+        }catch(Exception e){
+        	
+        }
     }
 
     public void completionEvent(QueryInfo queryInfo)
@@ -96,42 +113,50 @@ public class QueryMonitor
                 }
             }
 
-            eventClient.post(
-                    new QueryCompletionEvent(
-                            queryInfo.getQueryId(),
-                            queryInfo.getSession().getUser(),
-                            queryInfo.getSession().getSource(),
-                            serverVersion,
-                            environment,
-                            queryInfo.getSession().getCatalog(),
-                            queryInfo.getSession().getSchema(),
-                            queryInfo.getSession().getRemoteUserAddress(),
-                            queryInfo.getSession().getUserAgent(),
-                            queryInfo.getState(),
-                            queryInfo.getSelf(),
-                            queryInfo.getFieldNames(),
-                            queryInfo.getQuery(),
-                            queryStats.getCreateTime(),
-                            queryStats.getExecutionStartTime(),
-                            queryStats.getEndTime(),
-                            queryStats.getQueuedTime(),
-                            queryStats.getAnalysisTime(),
-                            queryStats.getDistributedPlanningTime(),
-                            queryStats.getTotalScheduledTime(),
-                            queryStats.getTotalCpuTime(),
-                            queryStats.getRawInputDataSize(),
-                            queryStats.getRawInputPositions(),
-                            queryStats.getTotalDrivers(),
-                            queryInfo.getErrorCode(),
-                            failureType,
-                            failureMessage,
-                            objectMapper.writeValueAsString(queryInfo.getOutputStage()),
-                            objectMapper.writeValueAsString(queryInfo.getFailureInfo()),
-                            objectMapper.writeValueAsString(queryInfo.getInputs()),
-                            objectMapper.writeValueAsString(mergedProperties.build())
-                    )
-            );
 
+            QueryCompletionEvent queryCompletionEvent = new QueryCompletionEvent(
+                    queryInfo.getQueryId(),
+                    queryInfo.getSession().getUser(),
+                    queryInfo.getSession().getSource(),
+                    serverVersion,
+                    environment,
+                    queryInfo.getSession().getCatalog(),
+                    queryInfo.getSession().getSchema(),
+                    queryInfo.getSession().getRemoteUserAddress(),
+                    queryInfo.getSession().getUserAgent(),
+                    queryInfo.getState(),
+                    queryInfo.getSelf(),
+                    queryInfo.getFieldNames(),
+                    queryInfo.getQuery(),
+                    queryStats.getCreateTime(),
+                    queryStats.getExecutionStartTime(),
+                    queryStats.getEndTime(),
+                    queryStats.getQueuedTime(),
+                    queryStats.getAnalysisTime(),
+                    queryStats.getDistributedPlanningTime(),
+                    queryStats.getTotalScheduledTime(),
+                    queryStats.getTotalCpuTime(),
+                    queryStats.getRawInputDataSize(),
+                    queryStats.getRawInputPositions(),
+                    queryStats.getTotalDrivers(),
+                    queryInfo.getErrorCode(),
+                    failureType,
+                    failureMessage,
+                    objectMapper.writeValueAsString(queryInfo.getOutputStage()),
+                    objectMapper.writeValueAsString(queryInfo.getFailureInfo()),
+                    objectMapper.writeValueAsString(queryInfo.getInputs()),
+                    objectMapper.writeValueAsString(mergedProperties.build())
+            );
+            eventClient.post(queryCompletionEvent);
+            try{
+                if(queryInfo.getSession().getCatalog().equals("proteum")){
+                ConnectorMetadata proteumMetadata = metadataManager.getConnectorMetadataById("proteum");
+                Method method = proteumMetadata.getClass().getMethod("handleEvent",QueryCompletionEvent.class);
+                method.invoke(proteumMetadata,queryCompletionEvent);
+                }
+                }catch(Exception e){
+                	
+                }
             logQueryTimeline(queryInfo);
         }
         catch (JsonProcessingException e) {
