@@ -980,6 +980,7 @@ public class PredicatePushDown
         @Override
         public PlanNode visitTableScan(TableScanNode node, RewriteContext<PredicatePushDownContext> context)
         {
+        	long time=System.currentTimeMillis();
         	PredicatePushDownContext predicatePushDownContext = customizedPredicatePushDownContext
 					.getPushDownPredicateMap().get(node.getId());
         	Map<FunctionCall,FunctionCall> newFunctionCallVsPreviousFunctionCall=customizedPredicatePushDownContext
@@ -1471,6 +1472,7 @@ public class PredicatePushDown
 			}else{
 				proteumTupleDomain2.setMinimumExpression(BooleanLiteral.TRUE_LITERAL);
 			}
+			log.info("Time taken in Predicate Push Down is : "+(System.currentTimeMillis()-time));
 			node.setProteumTupleDomain(proteumTupleDomain2);
             if (BooleanLiteral.FALSE_LITERAL.equals(predicate) || predicate instanceof NullLiteral) {
                 return new ValuesNode(idAllocator.getNextId(), node.getOutputSymbols(), ImmutableList.of());
