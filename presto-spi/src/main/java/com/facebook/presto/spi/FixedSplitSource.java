@@ -27,7 +27,12 @@ public class FixedSplitSource
     private final List<ConnectorSplit> splits;
     private int offset;
 
-    public FixedSplitSource(String dataSourceName, Iterable<? extends ConnectorSplit> splits)
+    
+    public List<ConnectorSplit> getSplits() {
+		return splits;
+	}
+
+	public FixedSplitSource(String dataSourceName, Iterable<? extends ConnectorSplit> splits)
     {
         this.dataSourceName = dataSourceName;
         if (splits == null) {

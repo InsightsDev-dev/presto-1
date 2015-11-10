@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.sql.planner;
 
+import com.facebook.presto.execution.QueryId;
 import com.facebook.presto.split.SampledSplitSource;
 import com.facebook.presto.split.SplitManager;
 import com.facebook.presto.split.SplitSource;
@@ -52,6 +53,15 @@ import static com.google.common.base.Preconditions.checkNotNull;
 public class DistributedExecutionPlanner
 {
     private final SplitManager splitManager;
+    private  QueryId queryId;
+    
+    public QueryId getQueryId() {
+		return queryId;
+	}
+
+	public void setQueryId(QueryId queryId) {
+		this.queryId = queryId;
+	}
 
     @Inject
     public DistributedExecutionPlanner(SplitManager splitManager)
@@ -64,7 +74,7 @@ public class DistributedExecutionPlanner
         PlanFragment currentFragment = root.getFragment();
 
         // get splits for this fragment, this is lazy so split assignments aren't actually calculated here
-        Visitor visitor = new Visitor();
+        Visitor visitor = new Visitor(queryId);
         Optional<SplitSource> splits = currentFragment.getRoot().accept(visitor, null);
 
         // create child stages
@@ -82,12 +92,21 @@ public class DistributedExecutionPlanner
     private final class Visitor
             extends PlanVisitor<Void, Optional<SplitSource>>
     {
+    	private final QueryId queryId;
+        
+    	public Visitor(QueryId queryId) {
+			this.queryId=queryId;
+		}
+        public QueryId getQueryId() {
+    		return queryId;
+    	}
+        
         @Override
         public Optional<SplitSource> visitTableScan(TableScanNode node, Void context)
         {
             // get dataSource for table
-            SplitSource splitSource = splitManager.getSplits(node.getLayout().get());
-
+            //SplitSource splitSource = splitManager.getSplits(node.getLayout().get());
+        	SplitSource splitSource = splitManager.getSplits(node.getLayout().get(),queryId);
             return Optional.of(splitSource);
         }
 

@@ -13,12 +13,14 @@
  */
 package com.facebook.presto.split;
 
+import com.facebook.presto.execution.QueryId;
 import com.facebook.presto.metadata.LegacyTableLayoutHandle;
 import com.facebook.presto.metadata.TableLayoutHandle;
 import com.facebook.presto.spi.ConnectorSplit;
 import com.facebook.presto.spi.ConnectorSplitManager;
 import com.facebook.presto.spi.ConnectorSplitSource;
 import com.facebook.presto.spi.FixedSplitSource;
+import com.facebook.presto.sql.planner.optimizations.RuntimeContext;
 import com.google.common.collect.ImmutableList;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,8 +37,10 @@ public class SplitManager
     {
         checkState(splitManagers.putIfAbsent(connectorId, connectorSplitManager) == null, "SplitManager for connector '%s' is already registered", connectorId);
     }
-
-    public SplitSource getSplits(TableLayoutHandle layout)
+    public SplitSource getSplits(TableLayoutHandle tableLayoutHandle) {
+		return getSplits(tableLayoutHandle,null);
+	}
+    public SplitSource getSplits(TableLayoutHandle layout,QueryId queryId)
     {
         String connectorId = layout.getConnectorId();
         ConnectorSplitManager splitManager = getConnectorSplitManager(connectorId);
@@ -49,6 +53,16 @@ public class SplitManager
             }
 
             source = splitManager.getPartitionSplits(handle.getTable(), handle.getPartitions());
+            if(source instanceof FixedSplitSource && queryId!=null){
+            	FixedSplitSource fixedSplitSource=(FixedSplitSource)source;
+            	for(ConnectorSplit connectorSplit:fixedSplitSource.getSplits()){
+            		if(connectorSplit instanceof RuntimeContext){
+            			RuntimeContext runtimeContext=(RuntimeContext) connectorSplit;
+            			runtimeContext.setQueryId(queryId);
+            		}
+            	}
+            }
+            
         }
         else {
             source = splitManager.getSplits(layout.getConnectorHandle());
@@ -64,4 +78,5 @@ public class SplitManager
 
         return result;
     }
+
 }
