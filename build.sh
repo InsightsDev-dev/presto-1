@@ -1,8 +1,8 @@
-MOBILIUM_HOME=/opt/mobileum
+PLATFORM_HOME=/opt/mobileum/WS
 if [[  -z $2 ]] ; then 
-  MOBILIUM_HOME='/opt/mobileum' 
+  PLATFORM_HOME='/opt/mobileum/WS' 
 else
-  MOBILIUM_HOME=$2 
+  PLATFORM_HOME=$2 
 fi
 
 if [ $1 != "-Pdev" ]  && [ $1 != "-Pprod" ]
@@ -124,7 +124,7 @@ then
         exit 10
 fi
 
-cp -R presto-server/target/presto-server-0.105 $MOBILIUM_HOME/
-cp -R presto-server/target/etc $MOBILIUM_HOME/presto-server-0.105/
-cp presto-cli/target/presto-cli-0.105-executable.jar $MOBILIUM_HOME/presto-server-0.105/presto
-chmod +x $MOBILIUM_HOME/presto-server-0.105/presto
+cp -R presto-server/target/presto-server-0.105 $PLATFORM_HOME/
+cp -R presto-server/target/etc $PLATFORM_HOME/presto-server-0.105/
+cp presto-cli/target/presto-cli-0.105-executable.jar $PLATFORM_HOME/presto-server-0.105/presto
+chmod +x $PLATFORM_HOME/presto-server-0.105/presto
