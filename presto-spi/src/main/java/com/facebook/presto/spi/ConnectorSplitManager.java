@@ -39,6 +39,12 @@ public interface ConnectorSplitManager
         throw new UnsupportedOperationException("not yet implemented");
     }
 
+    @Deprecated
+    default ConnectorSplitSource getPartitionSplits(ConnectorTableHandle table, List<ConnectorPartition> partitions, String queryId)
+    {
+        return getPartitionSplits(table,partitions);
+    }
+    
     default ConnectorSplitSource getSplits(ConnectorTableLayoutHandle layout)
     {
         throw new UnsupportedOperationException("not yet implemented");

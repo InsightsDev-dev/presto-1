@@ -20,7 +20,7 @@ import com.facebook.presto.spi.ConnectorSplit;
 import com.facebook.presto.spi.ConnectorSplitManager;
 import com.facebook.presto.spi.ConnectorSplitSource;
 import com.facebook.presto.spi.FixedSplitSource;
-import com.facebook.presto.sql.planner.optimizations.RuntimeContext;
+import com.facebook.presto.sql.planner.optimizations.IRuntimeContext;
 import com.google.common.collect.ImmutableList;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -52,17 +52,10 @@ public class SplitManager
                 return new ConnectorAwareSplitSource(connectorId, new FixedSplitSource(connectorId, ImmutableList.<ConnectorSplit>of()));
             }
 
-            source = splitManager.getPartitionSplits(handle.getTable(), handle.getPartitions());
-            if(source instanceof FixedSplitSource && queryId!=null){
-            	FixedSplitSource fixedSplitSource=(FixedSplitSource)source;
-            	for(ConnectorSplit connectorSplit:fixedSplitSource.getSplits()){
-            		if(connectorSplit instanceof RuntimeContext){
-            			RuntimeContext runtimeContext=(RuntimeContext) connectorSplit;
-            			runtimeContext.setQueryId(queryId);
-            		}
-            	}
-            }
-            
+            if(queryId != null)
+            	source = splitManager.getPartitionSplits(handle.getTable(), handle.getPartitions(),queryId.getId());
+            else
+            	source = splitManager.getPartitionSplits(handle.getTable(), handle.getPartitions());
         }
         else {
             source = splitManager.getSplits(layout.getConnectorHandle());
