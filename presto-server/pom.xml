@@ -95,30 +95,6 @@
                                 </artifactItem>
                                 <artifactItem>
                                     <groupId>com.facebook.presto</groupId>
-                                    <artifactId>presto-proteum</artifactId>
-                                    <version>${project.version}</version>
-                                    <type>zip</type>
-                                    <overWrite>false</overWrite>
-                                    <outputDirectory>${project.build.directory}/plugin/proteum</outputDirectory>
-                                </artifactItem>
-                                <artifactItem>
-                                    <groupId>com.facebook.presto</groupId>
-                                    <artifactId>presto-text</artifactId>
-                                    <version>${project.version}</version>
-                                    <type>zip</type>
-                                    <overWrite>false</overWrite>
-                                    <outputDirectory>${project.build.directory}/plugin/text</outputDirectory>
-                                </artifactItem>
-                                <artifactItem>
-                                    <groupId>com.facebook.presto</groupId>
-                                    <artifactId>presto-metadata</artifactId>
-                                    <version>${project.version}</version>
-                                    <type>zip</type>
-                                    <overWrite>false</overWrite>
-                                    <outputDirectory>${project.build.directory}/plugin/metadata</outputDirectory>
-                                </artifactItem>
-                                <artifactItem>
-                                    <groupId>com.facebook.presto</groupId>
                                     <artifactId>presto-example-http</artifactId>
                                     <version>${project.version}</version>
                                     <type>zip</type>
