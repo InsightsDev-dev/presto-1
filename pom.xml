@@ -69,9 +69,6 @@
         <module>presto-hive-hadoop2</module>
         <module>presto-hive-cdh4</module>
         <module>presto-hive-cdh5</module>
-		<module>presto-text</module>
-		<module>presto-metadata</module>
-        <module>presto-proteum</module>
         <module>presto-example-http</module>
         <module>presto-tpch</module>
         <module>presto-raptor</module>
@@ -125,28 +122,6 @@
                 <version>${project.version}</version>
                 <type>zip</type>
             </dependency>
-
-	    <dependency>
-                <groupId>com.facebook.presto</groupId>
-                <artifactId>presto-text</artifactId>
-                <version>${project.version}</version>
-                <type>zip</type>
-            </dependency>
-
-            <dependency>
-				<groupId>com.facebook.presto</groupId>
-				<artifactId>presto-metadata</artifactId>
-				<version>${project.version}</version>
-				<type>zip</type>
-			</dependency>
-
-            <dependency>
-                <groupId>com.facebook.presto</groupId>
-                <artifactId>presto-proteum</artifactId>
-                <version>${project.version}</version>
-                <type>zip</type>
-            </dependency>
-
             <dependency>
                 <groupId>com.facebook.presto</groupId>
                 <artifactId>presto-hive</artifactId>
